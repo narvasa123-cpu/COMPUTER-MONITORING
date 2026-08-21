@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { Device, SystemNotification, DashboardSummary } from '../types/index';
 
 interface MonitoringContextType {
@@ -7,6 +7,7 @@ interface MonitoringContextType {
   notifications: SystemNotification[];
   unreadNotificationCount: number;
   loading: boolean;
+  error: string | null;
   isPolling: boolean;
   setIsPolling: (polling: boolean) => void;
   lastRefreshed: Date;
@@ -40,8 +41,10 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const refreshInFlight = useRef(false);
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
@@ -53,6 +56,8 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isRulesModalOpen, setIsRulesModalOpen] = useState<boolean>(false);
 
   const refreshData = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     try {
       const [devRes, sumRes, notifRes] = await Promise.all([
         fetch('/api/devices'),
@@ -60,24 +65,25 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         fetch('/api/notifications')
       ]);
 
-      if (devRes.ok) {
-        const devData = await devRes.json();
-        setDevices(devData);
+      if (!devRes.ok || !sumRes.ok || !notifRes.ok) {
+        throw new Error('The monitoring service returned an unexpected response.');
       }
-      if (sumRes.ok) {
-        const sumData = await sumRes.json();
-        setSummary(sumData);
-      }
-      if (notifRes.ok) {
-        const notifData = await notifRes.json();
-        setNotifications(notifData);
-      }
+
+      const [devData, sumData, notifData] = await Promise.all([
+        devRes.json(), sumRes.json(), notifRes.json()
+      ]);
+      setDevices(devData);
+      setSummary(sumData);
+      setNotifications(notifData);
+      setError(null);
 
       setLastRefreshed(new Date());
     } catch (err) {
       console.warn('Background sync warning:', err);
+      setError('Unable to reach the monitoring service. Data may be out of date.');
     } finally {
       setLoading(false);
+      refreshInFlight.current = false;
     }
   }, []);
 
@@ -121,6 +127,7 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       notifications,
       unreadNotificationCount,
       loading,
+      error,
       isPolling,
       setIsPolling,
       lastRefreshed,

@@ -4,7 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import { DiagnosticEngine } from './server/diagnostic-engine';
 
 // Import Route Handlers
-import authRoutes from './server/routes/auth';
+import authRoutes, { requireSession } from './server/routes/auth';
 import deviceRoutes from './server/routes/devices';
 import agentRoutes from './server/routes/agent';
 import diagnosticRoutes from './server/routes/diagnostics';
@@ -19,7 +19,7 @@ import reportRoutes from './server/routes/reports';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Standard middleware
   app.use(express.json({ limit: '10mb' }));
@@ -38,17 +38,17 @@ async function startServer() {
 
   // API Routes
   app.use('/api/auth', authRoutes);
-  app.use('/api/devices', deviceRoutes);
+  app.use('/api/devices', requireSession, deviceRoutes);
   app.use('/api/agent', agentRoutes);
-  app.use('/api/diagnostics', diagnosticRoutes);
-  app.use('/api/tickets', ticketRoutes);
-  app.use('/api/maintenance', maintenanceRoutes);
-  app.use('/api/org', orgRoutes);
-  app.use('/api/users', userRoutes);
-  app.use('/api/settings', settingsRoutes);
-  app.use('/api/audit', auditRoutes);
-  app.use('/api/notifications', notificationRoutes);
-  app.use('/api/reports', reportRoutes);
+  app.use('/api/diagnostics', requireSession, diagnosticRoutes);
+  app.use('/api/tickets', requireSession, ticketRoutes);
+  app.use('/api/maintenance', requireSession, maintenanceRoutes);
+  app.use('/api/org', requireSession, orgRoutes);
+  app.use('/api/users', requireSession, userRoutes);
+  app.use('/api/settings', requireSession, settingsRoutes);
+  app.use('/api/audit', requireSession, auditRoutes);
+  app.use('/api/notifications', requireSession, notificationRoutes);
+  app.use('/api/reports', requireSession, reportRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {

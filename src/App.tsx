@@ -21,10 +21,11 @@ import { SettingsView } from './components/settings/SettingsView';
 import { AddDeviceModal } from './components/devices/AddDeviceModal';
 import { InstallAgentModal } from './components/devices/InstallAgentModal';
 import { DevTestingAgentModal } from './components/devices/DevTestingAgentModal';
+import { LoginView } from './components/auth/LoginView';
 import { Device, DiagnosticIssue } from './types/index';
 
 function MainAppLayout() {
-  const { activeTab, setActiveTab, selectedDeviceId, setSelectedDeviceId } = useMonitoring();
+  const { activeTab, setActiveTab, selectedDeviceId, setSelectedDeviceId, error, refreshData } = useMonitoring();
 
   // Cross-component Ticket and Maintenance modal handlers
   const [ticketModalTarget, setTicketModalTarget] = useState<{ device: Device | null; issue: DiagnosticIssue | null } | null>(null);
@@ -42,6 +43,13 @@ function MainAppLayout() {
     <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans antialiased">
       {/* Top Header */}
       <Header />
+
+      {error && (
+        <div className="mx-4 mt-4 sm:mx-6 lg:mx-8 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+          <span>{error}</span>
+          <button onClick={refreshData} className="shrink-0 font-bold underline underline-offset-2">Retry</button>
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         {/* Navigation Sidebar */}
@@ -140,9 +148,22 @@ function MainAppLayout() {
 export default function App() {
   return (
     <AuthProvider>
-      <MonitoringProvider>
-        <MainAppLayout />
-      </MonitoringProvider>
+      <AuthenticatedApp />
     </AuthProvider>
+  );
+}
+
+function AuthenticatedApp() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen bg-slate-100 grid place-items-center text-sm text-slate-500">Loading monitoring console...</div>;
+  }
+  if (!user) return <LoginView />;
+
+  return (
+    <MonitoringProvider>
+      <MainAppLayout />
+    </MonitoringProvider>
   );
 }

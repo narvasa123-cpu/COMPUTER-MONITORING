@@ -23,7 +23,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchCurrentUser = async () => {
     try {
-      const storedToken = localStorage.getItem('sys_auth_token') || 'system-admin-static-token';
+      const storedToken = localStorage.getItem('sys_auth_token');
+      if (!storedToken) {
+        return;
+      }
       const res = await fetch('/api/auth/me', {
         headers: { 'Authorization': `Bearer ${storedToken}` }
       });
@@ -33,26 +36,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(data.token);
         localStorage.setItem('sys_auth_token', data.token);
       } else {
-        // Fallback default admin
-        setUser({
-          id: 'user-superadmin-01',
-          username: 'admin',
-          email: 'admin@system.local',
-          fullName: 'IT Chief Administrator',
-          role: 'super_admin',
-          createdAt: new Date().toISOString()
-        });
+        localStorage.removeItem('sys_auth_token');
+        setToken(null);
+        setUser(null);
       }
     } catch (err) {
-      console.warn('Auth fetch error, using default admin session:', err);
-      setUser({
-        id: 'user-superadmin-01',
-        username: 'admin',
-        email: 'admin@system.local',
-        fullName: 'IT Chief Administrator',
-        role: 'super_admin',
-        createdAt: new Date().toISOString()
-      });
+      console.warn('Unable to restore the current session:', err);
+      setUser(null);
     } finally {
       setLoading(false);
     }

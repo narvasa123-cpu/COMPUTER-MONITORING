@@ -9,7 +9,8 @@ import {
   ShieldCheck, 
   UserCheck, 
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  LogOut
 } from 'lucide-react';
 import { useMonitoring } from '../../context/MonitoringContext';
 import { useAuth } from '../../context/AuthContext';
@@ -31,7 +32,7 @@ export const Header: React.FC = () => {
     setSelectedDeviceId
   } = useMonitoring();
 
-  const { user, switchDemoRole } = useAuth();
+  const { user, switchDemoRole, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -239,6 +240,18 @@ export const Header: React.FC = () => {
                       {user?.role === r.role && <Check className="w-3.5 h-3.5 text-indigo-600" />}
                     </button>
                   ))}
+                </div>
+                <div className="border-t border-slate-100 pt-1">
+                  <button
+                    onClick={() => {
+                      setShowRoleMenu(false);
+                      logout();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign out
+                  </button>
                 </div>
               </div>
             )}
