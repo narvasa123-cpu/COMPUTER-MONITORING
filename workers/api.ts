@@ -86,8 +86,8 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     const url = new URL(request.url);
     const path = url.pathname;
-    if (path === '/api/health') return json({ status: 'ok', time: now(), runtime: 'cloudflare-workers' });
     const state = await load(env);
+    if (path === '/api/health') return json({ status: 'ok', time: now(), runtime: 'cloudflare-workers', database: 'supabase' });
 
     if (path === '/api/auth/login' && request.method === 'POST') {
       const body = await request.json<Json>();
@@ -127,6 +127,9 @@ export default {
     return json({ error: 'Endpoint not yet migrated to the Cloudflare API.' }, 404);
     } catch (error) {
       console.error(JSON.stringify({ event: 'api_error', path: new URL(request.url).pathname, message: error instanceof Error ? error.message : String(error) }));
+      if (new URL(request.url).pathname === '/api/health') {
+        return json({ status: 'error', database: 'supabase', error: 'The Worker cannot connect to Supabase. Check the database migration and Cloudflare secret.' }, 503);
+      }
       return json({ error: 'The monitoring service encountered an unexpected error.' }, 500);
     }
   }
