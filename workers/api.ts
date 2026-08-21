@@ -1,4 +1,7 @@
-interface Env { DB: D1Database }
+interface Env {
+  SUPABASE_URL: string;
+  SUPABASE_SECRET_KEY: string;
+}
 type Json = Record<string, unknown>;
 
 const cors = {
@@ -16,9 +19,19 @@ const hash = async (value: string) => {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
+function databaseHeaders(env: Env) {
+  return {
+    apikey: env.SUPABASE_SECRET_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
+    'Content-Type': 'application/json'
+  };
+}
+
 async function load(env: Env): Promise<Json> {
-  const row = await env.DB.prepare('SELECT data FROM monitoring_state WHERE id = 1').first<{ data: string }>();
-  if (row) return JSON.parse(row.data);
+  const response = await fetch(`${env.SUPABASE_URL}/rest/v1/monitoring_state?id=eq.1&select=data`, { headers: databaseHeaders(env) });
+  if (!response.ok) throw new Error(`Supabase read failed with status ${response.status}.`);
+  const rows = await response.json() as Array<{ data: Json }>;
+  if (rows[0]) return rows[0].data;
   const state = {
     users: [{ id: 'user-superadmin-01', username: 'admin', email: 'admin@system.local', fullName: 'IT Chief Administrator', role: 'super_admin', passwordHash: await hash('admin123'), createdAt: now() }],
     devices: [], notifications: [], telemetry: {}, sessions: {},
@@ -29,8 +42,12 @@ async function load(env: Env): Promise<Json> {
 }
 
 async function save(env: Env, state: Json) {
-  await env.DB.prepare('INSERT INTO monitoring_state (id, data, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at')
-    .bind(JSON.stringify(state), now()).run();
+  const response = await fetch(`${env.SUPABASE_URL}/rest/v1/monitoring_state?on_conflict=id`, {
+    method: 'POST',
+    headers: { ...databaseHeaders(env), Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({ id: 1, data: state, updated_at: now() })
+  });
+  if (!response.ok) throw new Error(`Supabase write failed with status ${response.status}.`);
 }
 
 function token(request: Request) {

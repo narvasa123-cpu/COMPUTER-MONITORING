@@ -1,26 +1,15 @@
 # Cloudflare Deployment
 
-This deployment uses Cloudflare Workers and D1 on the free plan. A payment card is not required for the free tier.
+This deployment uses Cloudflare Workers for the site and API, and Supabase Postgres for persistent data.
 
 1. Create a free Cloudflare account and run `npm install`.
 2. Authenticate with `npx wrangler login`.
-3. Create the database:
+3. In Supabase, open **SQL Editor**, paste and run `supabase/migrations/20260821130000_monitoring_state.sql`.
+4. In Supabase, open **Project Settings -> API**, copy the `sb_secret_...` key. Do not use the publishable key for this step.
+5. Store the secret in Cloudflare using the interactive prompt, then deploy:
 
    ```bash
-   npx wrangler d1 create computer-monitoring
-   ```
-
-4. Copy the returned `database_id` into `wrangler.jsonc`, replacing `REPLACE_WITH_YOUR_D1_DATABASE_ID`.
-5. Apply the database migration and deploy the API:
-
-   ```bash
-   npx wrangler d1 migrations apply computer-monitoring --remote
-   npm run worker:deploy
-   ```
-
-6. Deploy the complete application. The Worker serves both the Vite frontend and the API on one URL:
-
-   ```bash
+   npx wrangler secret put SUPABASE_SECRET_KEY
    npm run worker:deploy
    ```
 

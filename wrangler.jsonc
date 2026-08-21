@@ -14,12 +14,7 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "computer-monitoring",
-      "database_id": "5d500cea-ca72-4224-a791-2b67af3b56f7",
-      "migrations_dir": "migrations"
-    }
-  ]
+  "vars": {
+    "SUPABASE_URL": "https://jyxkawoodxsdfflepkjb.supabase.co"
+  }
 }
