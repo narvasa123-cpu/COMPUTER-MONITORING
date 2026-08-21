@@ -128,7 +128,7 @@ export default {
     } catch (error) {
       console.error(JSON.stringify({ event: 'api_error', path: new URL(request.url).pathname, message: error instanceof Error ? error.message : String(error) }));
       if (new URL(request.url).pathname === '/api/health') {
-        return json({ status: 'error', database: 'supabase', error: 'The Worker cannot connect to Supabase. Check the database migration and Cloudflare secret.' }, 503);
+        return json({ status: 'error', database: 'supabase', error: 'The Worker cannot connect to Supabase. Check the database migration and Cloudflare secret.', detail: error instanceof Error ? error.message : 'Unknown database error' }, 503);
       }
       return json({ error: 'The monitoring service encountered an unexpected error.' }, 500);
     }
