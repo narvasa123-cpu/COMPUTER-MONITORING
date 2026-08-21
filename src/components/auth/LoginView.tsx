@@ -13,8 +13,8 @@ export const LoginView: React.FC = () => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
-    const success = await login(username.trim(), password);
-    if (!success) setError('The username or password is incorrect.');
+    const result = await login(username.trim(), password);
+    if (!result.success) setError(result.error || 'Unable to sign in.');
     setSubmitting(false);
   };
 

@@ -5,7 +5,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   switchDemoRole: (role: UserRole) => Promise<void>;
 }
@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -60,12 +60,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(data.user);
         setToken(data.token);
         localStorage.setItem('sys_auth_token', data.token);
-        return true;
+        return { success: true };
       }
-      return false;
+      if (res.status === 401) {
+        return { success: false, error: 'The username or password is incorrect.' };
+      }
+      return { success: false, error: 'The monitoring server is unavailable. Check the backend deployment and try again.' };
     } catch (err) {
       console.error('Login error:', err);
-      return false;
+      return { success: false, error: 'Unable to connect to the monitoring server. Check your network connection and backend deployment.' };
     }
   };
 
