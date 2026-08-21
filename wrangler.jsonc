@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "computer-monitoring",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "5d500cea-ca72-4224-a791-2b67af3b56f7",
       "migrations_dir": "migrations"
     }
   ]
