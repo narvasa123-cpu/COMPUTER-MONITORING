@@ -18,10 +18,12 @@ This deployment uses Cloudflare Workers and D1 on the free plan. A payment card 
    npm run worker:deploy
    ```
 
-6. Copy the Worker URL, then set this Netlify environment variable and redeploy the site:
+6. Deploy the complete application. The Worker serves both the Vite frontend and the API on one URL:
 
-   ```text
-   VITE_API_URL=https://computer-monitoring-api.YOUR-SUBDOMAIN.workers.dev
+   ```bash
+   npm run worker:deploy
    ```
 
-Confirm the API deployment by opening `https://YOUR-WORKER-URL/api/health`. It should return JSON with `"status":"ok"`.
+Open the Worker URL shown by Wrangler. Confirm `https://YOUR-WORKER-URL/api/health` returns JSON with `"status":"ok"`.
+
+The Cloudflare dashboard exposes errors and request logs under **Workers & Pages -> computer-monitoring-api -> Observability**. For live terminal debugging, run `npx wrangler tail computer-monitoring-api --status error`.

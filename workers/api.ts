@@ -65,6 +65,7 @@ function summary(state: Json) {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    try {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     const url = new URL(request.url);
     const path = url.pathname;
@@ -107,5 +108,9 @@ export default {
     if (path === '/api/org/departments' || path === '/api/org/locations') return json(path.endsWith('departments') ? state.departments : state.locations);
     if (['/api/tickets', '/api/diagnostics/issues', '/api/maintenance', '/api/users', '/api/audit'].includes(path)) return json([]);
     return json({ error: 'Endpoint not yet migrated to the Cloudflare API.' }, 404);
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'api_error', path: new URL(request.url).pathname, message: error instanceof Error ? error.message : String(error) }));
+      return json({ error: 'The monitoring service encountered an unexpected error.' }, 500);
+    }
   }
 };

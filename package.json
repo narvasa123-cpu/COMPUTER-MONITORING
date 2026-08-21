@@ -8,8 +8,9 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
-    "worker:dev": "wrangler dev",
-    "worker:deploy": "wrangler deploy",
+    "worker:build": "vite build",
+    "worker:dev": "npm run worker:build && wrangler dev",
+    "worker:deploy": "npm run worker:build && wrangler deploy",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
@@ -35,6 +36,6 @@
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
     "@types/express": "^4.17.21",
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.99.0"
   }
 }
