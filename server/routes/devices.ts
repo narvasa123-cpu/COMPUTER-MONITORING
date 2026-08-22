@@ -4,6 +4,7 @@ import { DiagnosticEngine } from '../diagnostic-engine';
 import { Device, HardwareSpecs } from '../../src/types/index';
 import crypto from 'crypto';
 import { calculateDeviceHealth } from '../health';
+import { permanentlyPurgeDeviceData } from '../../src/lib/device-purge';
 
 const router = Router();
 
@@ -246,32 +247,31 @@ router.put('/:id', (req, res) => {
 // DELETE device
 router.delete('/:id', (req, res) => {
   const data = db.get();
-  const index = data.devices.findIndex(d => d.id === req.params.id);
-  if (index === -1) {
+  const device = data.devices.find(d => d.id === req.params.id);
+  if (!device) {
     return res.status(404).json({ error: 'Device not found.' });
   }
+  if (req.body?.permanentlyDelete !== true || String(req.body?.confirmAssetId || '').trim() !== String(device.assetId || '').trim()) {
+    return res.status(400).json({ error: 'Permanent deletion requires the exact Asset ID confirmation.' });
+  }
 
-  const [removed] = data.devices.splice(index, 1);
-  delete data.hardwareSpecs[removed.id];
-  delete data.latestTelemetry[removed.id];
-  delete data.telemetryHistory[removed.id];
-
-  // Also clean related active issues
-  data.diagnosticIssues = data.diagnosticIssues.filter(i => i.deviceId !== removed.id);
+  // The local backend uses different collection names than the Worker. Present
+  // a normalized view to the shared, tested permanent-purge operation.
+  const localState = data as unknown as Record<string, unknown>;
+  localState.issues = data.diagnosticIssues;
+  localState.tickets = data.repairTickets;
+  localState.maintenance = data.maintenanceRecords;
+  const purged = permanentlyPurgeDeviceData(localState, device.id);
+  data.diagnosticIssues = (localState.issues || []) as typeof data.diagnosticIssues;
+  data.repairTickets = (localState.tickets || []) as typeof data.repairTickets;
+  data.maintenanceRecords = (localState.maintenance || []) as typeof data.maintenanceRecords;
+  delete localState.issues;
+  delete localState.tickets;
+  delete localState.maintenance;
+  if (!purged) return res.status(404).json({ error: 'Device not found.' });
 
   db.scheduleSave();
-
-  db.addAuditLog(
-    'system-admin',
-    'Administrator',
-    'it_admin',
-    'DEVICE_DELETED',
-    'Device',
-    removed.id,
-    `Deleted device ${removed.deviceName} (${removed.assetId}) from system inventory.`
-  );
-
-  return res.json({ success: true, message: `Device ${removed.deviceName} removed.` });
+  return res.json({ success: true, permanentlyDeleted: true, deletedDeviceId: purged.deviceId, deletionSummary: purged.summary });
 });
 
 // GET telemetry history

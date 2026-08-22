@@ -1,4 +1,5 @@
 import { generateNodeAgent, generatePowerShellAgent, generatePythonAgent } from '../server/agent-templates';
+import { permanentlyPurgeDeviceData } from '../src/lib/device-purge';
 
 interface Env {
   SUPABASE_URL: string;
@@ -646,14 +647,16 @@ export default {
     }
     if (deviceMatch && request.method === 'DELETE') {
       if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403);
-      const devices = state.devices as Json[];
-      const index = devices.findIndex(item => item.id === deviceMatch[1]);
-      if (index < 0) return json({ error: 'Device not found.' }, 404);
-      const [deleted] = devices.splice(index, 1);
-      const telemetry = state.telemetry as Record<string, Json> | undefined;
-      if (telemetry) delete telemetry[String(deleted.id)];
+      const device = (state.devices as Json[]).find(item => item.id === deviceMatch[1]);
+      if (!device) return json({ error: 'Device not found.' }, 404);
+      const body = await request.json().catch(() => ({})) as Json;
+      if (body.permanentlyDelete !== true || stringValue(body.confirmAssetId) !== stringValue(device.assetId)) {
+        return json({ error: 'Permanent deletion requires the exact Asset ID confirmation.' }, 400);
+      }
+      const purged = permanentlyPurgeDeviceData(state, String(device.id));
+      if (!purged) return json({ error: 'Device not found.' }, 404);
       await save(env, state);
-      return json({ success: true, deletedDeviceId: deleted.id });
+      return json({ success: true, permanentlyDeleted: true, deletedDeviceId: purged.deviceId, deletionSummary: purged.summary });
     }
     const shutdownMatch = path.match(/^\/api\/devices\/([^/]+)\/shutdown$/);
     if (shutdownMatch && request.method === 'POST') {

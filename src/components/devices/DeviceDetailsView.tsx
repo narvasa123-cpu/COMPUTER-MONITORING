@@ -48,7 +48,8 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
     devices, 
     refreshData, 
     setIsInstallModalOpen, 
-    setInstallTargetDevice
+    setInstallTargetDevice,
+    setSelectedDeviceId
   } = useMonitoring();
   const { user } = useAuth();
 
@@ -59,6 +60,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   const [activeTab, setActiveTab] = useState<'telemetry' | 'network' | 'hardware' | 'processes' | 'issues' | 'tickets' | 'maintenance'>('telemetry');
   const [loading, setLoading] = useState<boolean>(true);
   const [deleting, setDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDeviceData();
@@ -86,19 +88,34 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
 
   const handleDeleteDevice = async () => {
     if (!device) return;
-    if (!confirm(`Are you sure you want to delete ${device.deviceName} (${device.assetId})? This will permanently remove its telemetry history.`)) {
+    setDeleteError(null);
+    const confirmation = prompt(
+      `Permanently delete ${device.deviceName} (${device.assetId})?\n\n` +
+      'This erases the computer record, telemetry, Wi-Fi diagnostics, health and diagnostic findings, tickets, maintenance records, notifications, queued commands, remote-session records, and device-linked audit records. This cannot be undone.\n\n' +
+      `Type the exact Asset ID to continue: ${device.assetId}`
+    );
+    if (confirmation === null) return;
+    if (confirmation.trim() !== device.assetId.trim()) {
+      setDeleteError('Deletion cancelled: the Asset ID confirmation did not match.');
       return;
     }
 
     setDeleting(true);
     try {
-      const res = await fetch(`/api/devices/${device.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        await refreshData();
-        onBack();
-      }
+      const res = await fetch(`/api/devices/${device.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permanentlyDelete: true, confirmAssetId: confirmation.trim() })
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || 'The computer could not be deleted.');
+      setInstallTargetDevice(null);
+      setIsInstallModalOpen(false);
+      setSelectedDeviceId(null);
+      await refreshData();
+      onBack();
     } catch (err) {
-      console.error(err);
+      setDeleteError(err instanceof Error ? err.message : 'The computer could not be deleted.');
     } finally {
       setDeleting(false);
     }
@@ -289,13 +306,19 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
               onClick={handleDeleteDevice}
               disabled={deleting}
               className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-              title="Delete device"
+              title="Permanently delete this computer and all associated data"
             >
               <Trash2 className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
+
+      {deleteError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+          {deleteError}
+        </div>
+      )}
 
       {/* Overview Quick Stats Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
