@@ -21,6 +21,88 @@ const hash = async (value: string) => {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
+const defaultSettings = () => ({ heartbeatIntervalSec: 30, connectionLostThresholdSec: 60, offlineThresholdSec: 300, telemetryRetentionPoints: 1440, autoCreateTicketOnCritical: true, enableSoundAlerts: true, agentApiUrl: '' });
+const defaultRules = () => ([
+  { id: 'rule-cpu-high', code: 'HIGH_CPU_USAGE', name: 'High CPU Usage', metric: 'cpu_usage', thresholdValue: 85, thresholdUnit: '%', durationSeconds: 30, severity: 'High', description: 'Sustained CPU utilization is above the configured threshold.', enabled: true, autoCreateTicket: false, possibleCauses: ['Runaway process', 'Heavy scheduled workload'], recommendedActions: ['Inspect the highest CPU-consuming processes.'] },
+  { id: 'rule-ram-high', code: 'HIGH_RAM_USAGE', name: 'High Memory Usage', metric: 'ram_usage', thresholdValue: 90, thresholdUnit: '%', durationSeconds: 30, severity: 'High', description: 'Physical memory utilization is above the configured threshold.', enabled: true, autoCreateTicket: false, possibleCauses: ['Memory pressure', 'Memory leak'], recommendedActions: ['Review processes and available memory.'] },
+  { id: 'rule-disk-low', code: 'LOW_DISK_SPACE', name: 'Low Disk Space', metric: 'disk_free_percent', thresholdValue: 12, thresholdUnit: '% free', durationSeconds: 0, severity: 'Critical', description: 'Primary storage free capacity is below the configured threshold.', enabled: true, autoCreateTicket: true, possibleCauses: ['Temporary files', 'Large local data'], recommendedActions: ['Free at least 15% of storage capacity.'] },
+  { id: 'rule-cpu-temp', code: 'HIGH_CPU_TEMP', name: 'High CPU Temperature', metric: 'cpu_temp', thresholdValue: 82, thresholdUnit: '°C', durationSeconds: 20, severity: 'Critical', description: 'CPU temperature is above the configured threshold.', enabled: true, autoCreateTicket: true, possibleCauses: ['Dust', 'Cooling failure'], recommendedActions: ['Inspect cooling and airflow.'] }
+]);
+
+function initializeState(state: Json) {
+  state.users ||= []; state.devices ||= []; state.notifications ||= []; state.telemetry ||= {}; state.sessions ||= {};
+  state.departments ||= []; state.locations ||= []; state.tickets ||= []; state.issues ||= []; state.maintenance ||= []; state.telemetryHistory ||= {};
+  state.auditLogs ||= []; state.diagnosticRules ||= defaultRules(); state.settings ||= defaultSettings();
+  return state;
+}
+
+function evaluateTelemetry(state: Json, device: Json, telemetry: Json) {
+  const issues = state.issues as Json[];
+  const notifications = state.notifications as Json[];
+  const rules = state.diagnosticRules as Json[];
+  const storage = Array.isArray(telemetry.storage) ? telemetry.storage as Json[] : [];
+  const lowestFree = storage.reduce((lowest, disk) => Math.min(lowest, Number(disk.capacityBytes || 0) > 0 ? (Number(disk.freeBytes || 0) / Number(disk.capacityBytes)) * 100 : 100), 100);
+  const metrics: Record<string, number | undefined> = {
+    cpu_usage: Number(telemetry.cpuUsagePercent), ram_usage: Number(telemetry.ramUsagePercent), cpu_temp: telemetry.cpuTempC === undefined ? undefined : Number(telemetry.cpuTempC), disk_free_percent: storage.length ? lowestFree : undefined
+  };
+  for (const rule of rules) {
+    if (rule.enabled === false) continue;
+    const current = metrics[String(rule.metric)];
+    if (current === undefined || Number.isNaN(current)) continue;
+    const violates = rule.metric === 'disk_free_percent' ? current < Number(rule.thresholdValue) : current > Number(rule.thresholdValue);
+    const existing = issues.find(issue => issue.deviceId === device.id && issue.ruleCode === rule.code && issue.status !== 'Resolved');
+    if (violates) {
+      const description = `${rule.name}: observed ${current.toFixed(1)}${rule.thresholdUnit || ''}; configured threshold ${rule.thresholdValue}${rule.thresholdUnit || ''}.`;
+      if (existing) { existing.evidence = { metricName: rule.name, metric: rule.metric, currentValue: current, thresholdValue: rule.thresholdValue, details: description }; existing.description = description; }
+      else {
+        const issue: Json = { id: id('issue'), deviceId: device.id, deviceName: device.deviceName, assetId: device.assetId, locationName: device.locationId || 'Unassigned', departmentName: device.departmentId || 'Unassigned', ruleCode: rule.code, title: rule.name, description, severity: rule.severity || 'Medium', status: 'Active', detectedAt: now(), evidence: { metricName: rule.name, metric: rule.metric, currentValue: current, thresholdValue: rule.thresholdValue, details: description }, possibleCauses: rule.possibleCauses || [], recommendedAction: Array.isArray(rule.recommendedActions) ? rule.recommendedActions[0] : 'Review telemetry evidence.', recommendedActions: rule.recommendedActions || [] };
+        issues.unshift(issue);
+        notifications.unshift({ id: id('notif'), title: `${rule.severity || 'Warning'}: ${rule.name}`, message: description, type: rule.severity === 'Critical' ? 'critical' : 'warning', deviceId: device.id, deviceName: device.deviceName, issueId: issue.id, isRead: false, createdAt: now() });
+        if (rule.autoCreateTicket === true && (state.settings as Json).autoCreateTicketOnCritical === true && rule.severity === 'Critical') {
+          const tickets = state.tickets as Json[]; const ticket: Json = { id: id('ticket'), ticketNumber: `INC-${new Date().getUTCFullYear()}-${String(tickets.length + 1).padStart(4, '0')}`, deviceId: device.id, deviceName: device.deviceName, assetId: device.assetId, issueId: issue.id, problem: rule.name, diagnosis: description, title: rule.name, description, severity: 'Critical', priority: 'Urgent', status: 'Open', detectedDate: now(), notes: [], attachments: [], createdAt: now(), updatedAt: now() }; tickets.unshift(ticket); issue.ticketId = ticket.id;
+        }
+      }
+    } else if (existing) { existing.status = 'Resolved'; existing.resolvedAt = now(); }
+  }
+  const activeForDevice = issues.filter(issue => issue.deviceId === device.id && issue.status !== 'Resolved');
+  device.activeIssueCount = activeForDevice.length;
+  device.status = activeForDevice.some(issue => issue.severity === 'Critical') ? 'Critical' : activeForDevice.length ? 'Warning' : 'Online';
+}
+
+const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+function csvDownload(filename: string, headers: string[], rows: unknown[][]) {
+  const body = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+  return new Response(body, { headers: { ...cors, 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${filename}"` } });
+}
+
+function deviceHealth(state: Json, device: Json) {
+  const telemetry = (state.telemetry as Record<string, Json>)[String(device.id)] || device.latestTelemetry as Json | undefined;
+  if (!telemetry) return { score: null, level: 'Unavailable', reasons: ['No agent telemetry has been received.'], recommendations: ['Install or reconnect the monitoring agent.'], calculatedAt: now() };
+  let score = 100; const reasons: string[] = []; const recommendations: string[] = [];
+  const reduce = (points: number, reason: string, recommendation: string) => { score -= points; reasons.push(reason); recommendations.push(recommendation); };
+  if (device.connectionState !== 'connected') reduce(25, 'Agent connection is stale or offline.', 'Restore agent connectivity.');
+  if (Number(telemetry.cpuUsagePercent || 0) >= 90) reduce(12, `CPU utilization is ${telemetry.cpuUsagePercent}%.`, 'Inspect sustained CPU consumers.');
+  else if (Number(telemetry.cpuUsagePercent || 0) >= 80) reduce(6, `CPU utilization is elevated at ${telemetry.cpuUsagePercent}%.`, 'Review running workloads.');
+  if (Number(telemetry.ramUsagePercent || 0) >= 90) reduce(12, `Memory utilization is ${telemetry.ramUsagePercent}%.`, 'Reduce memory pressure or evaluate a RAM upgrade.');
+  const drives = Array.isArray(telemetry.storage) ? telemetry.storage as Json[] : [];
+  const freePercent = drives.reduce((lowest, disk) => Math.min(lowest, Number(disk.capacityBytes || 0) ? (Number(disk.freeBytes || 0) / Number(disk.capacityBytes)) * 100 : 100), 100);
+  if (drives.length && freePercent < 5) reduce(22, `Storage free space is ${freePercent.toFixed(1)}%.`, 'Free storage immediately.');
+  else if (drives.length && freePercent < 12) reduce(12, `Storage free space is ${freePercent.toFixed(1)}%.`, 'Free at least 15% storage capacity.');
+  if (telemetry.cpuTempC !== undefined && Number(telemetry.cpuTempC) >= 82) reduce(18, `CPU temperature is ${telemetry.cpuTempC}°C.`, 'Inspect cooling and airflow.');
+  const activeIssues = (state.issues as Json[]).filter(issue => issue.deviceId === device.id && issue.status !== 'Resolved');
+  activeIssues.forEach(issue => reduce(issue.severity === 'Critical' ? 12 : issue.severity === 'High' ? 7 : 3, `Active finding: ${issue.title}.`, String(issue.recommendedAction || 'Review diagnostic evidence.')));
+  const finalScore = Math.max(0, Math.round(score));
+  const level = finalScore >= 90 ? 'Excellent' : finalScore >= 75 ? 'Good' : finalScore >= 60 ? 'Attention Required' : finalScore >= 40 ? 'Warning' : 'Critical';
+  return { score: finalScore, level, reasons, recommendations: [...new Set(recommendations)], calculatedAt: now() };
+}
+
+function publicDevice(state: Json, device: Json, role: unknown) {
+  const safe: Json = { ...device, health: deviceHealth(state, device) };
+  delete safe.deviceToken;
+  if (!['super_admin', 'it_admin'].includes(String(role))) delete safe.registrationCode;
+  return safe;
+}
+
 function databaseHeaders(env: Env) {
   return {
     apikey: env.SUPABASE_SECRET_KEY,
@@ -33,14 +115,14 @@ async function load(env: Env): Promise<Json> {
   const response = await fetch(`${env.SUPABASE_URL}/rest/v1/monitoring_state?id=eq.1&select=data`, { headers: databaseHeaders(env) });
   if (!response.ok) throw new Error(`Supabase read failed with status ${response.status}.`);
   const rows = await response.json() as Array<{ data: Json }>;
-  if (rows[0]) return rows[0].data;
+  if (rows[0]) return initializeState(rows[0].data);
   const state = {
     users: [{ id: 'user-superadmin-01', username: 'admin', email: 'admin@system.local', fullName: 'IT Chief Administrator', role: 'super_admin', passwordHash: await hash('admin123'), createdAt: now() }],
     devices: [], notifications: [], telemetry: {}, sessions: {},
     departments: [], locations: [], tickets: [], issues: []
   };
   await save(env, state);
-  return state;
+  return initializeState(state);
 }
 
 async function save(env: Env, state: Json) {
@@ -79,14 +161,28 @@ function agentDownload(type: string, serverUrl: string, registrationCode: string
 
 function summary(state: Json) {
   const devices = state.devices as Json[];
+  const issues = state.issues as Json[];
+  const tickets = state.tickets as Json[];
   const count = (status: string) => devices.filter(device => device.status === status).length;
+  const activeIssues = issues.filter(issue => issue.status === 'Active' || issue.status === 'Investigating');
+  const telemetry = state.telemetry as Record<string, Json>;
+  const values = Object.values(telemetry);
+  const scores = devices.map(device => deviceHealth(state, device).score).filter((score): score is number => score !== null);
   return {
+    overallHealthScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
     totalDevices: devices.length, onlineDevices: count('Online'), offlineDevices: count('Offline'), warningDevices: count('Warning'),
     criticalDevices: count('Critical'), maintenanceDevices: count('Maintenance'), waitingDevices: count('Waiting for Agent Connection'),
-    openTickets: 0, resolvedTickets: 0, activeIssues: 0, criticalIssues: 0, devicesWithLowStorage: 0,
-    devicesWithHighCpu: 0, devicesWithHighMemory: 0, devicesWithHighTemp: 0,
+    openTickets: tickets.filter(ticket => !['Resolved', 'Closed'].includes(String(ticket.status))).length,
+    resolvedTickets: tickets.filter(ticket => ['Resolved', 'Closed'].includes(String(ticket.status))).length,
+    activeIssues: activeIssues.length, criticalIssues: activeIssues.filter(issue => issue.severity === 'Critical').length,
+    devicesWithLowStorage: values.filter(item => Array.isArray(item.storage) && (item.storage as Json[]).some(disk => Number(disk.capacityBytes || 0) > 0 && Number(disk.freeBytes || 0) / Number(disk.capacityBytes || 1) <= .15)).length,
+    devicesWithHighCpu: values.filter(item => Number(item.cpuUsagePercent || 0) >= 80).length,
+    devicesWithHighMemory: values.filter(item => Number(item.ramUsagePercent || 0) >= 85).length,
+    devicesWithHighTemp: values.filter(item => Number(item.cpuTempC || 0) >= 80).length,
     statusDistribution: ['Online', 'Warning', 'Critical', 'Offline', 'Maintenance'].map(status => ({ status, count: count(status) })),
-    problemsByType: [], problemsBySeverity: [], recentAlerts: (state.notifications as Json[]).slice(0, 10), recentTickets: []
+    problemsByType: Array.from(new Set(activeIssues.map(issue => String(issue.ruleCode || issue.title || 'Other')))).map(type => ({ type, count: activeIssues.filter(issue => String(issue.ruleCode || issue.title || 'Other') === type).length })),
+    problemsBySeverity: ['Critical', 'High', 'Medium', 'Low', 'Informational'].map(severity => ({ severity, count: activeIssues.filter(issue => issue.severity === severity).length })),
+    recentAlerts: (state.notifications as Json[]).slice(0, 10), recentTickets: tickets.slice(0, 8)
   };
 }
 
@@ -115,15 +211,34 @@ export default {
       if (!registrationCode) return json({ success: false, error: 'Registration code is required.' }, 400);
       const devices = state.devices as Json[];
       let device = devices.find(item => String(item.registrationCode || '').toUpperCase() === registrationCode);
-      if (!device) return json({ success: false, error: 'The registration code is invalid.' }, 401);
+      if (!device || (device.registrationExpiresAt && Number(device.registrationExpiresAt) < Date.now())) return json({ success: false, error: 'The registration code is invalid, expired, or already used.' }, 401);
       const timestamp = now();
       const deviceToken = String(device.deviceToken || `devtok_${crypto.randomUUID().replaceAll('-', '')}`);
       Object.assign(device, {
         deviceName: body.computerName || body.hostname || device.deviceName,
         deviceToken, status: 'Online', connectionState: 'connected',
         lastHeartbeatAt: timestamp, lastOnlineAt: timestamp, offlineSince: undefined,
-        operatingSystem: body.osName || body.osVersion || device.operatingSystem
+        operatingSystem: body.osName || body.osVersion || device.operatingSystem,
+        serialNumber: body.serialNumber || device.serialNumber,
+        specs: {
+          deviceId: device.id,
+          cpuModel: body.cpuModel || undefined,
+          cpuCores: body.cpuCores === undefined ? undefined : Number(body.cpuCores),
+          cpuLogicalCores: body.cpuLogicalProcessors === undefined ? undefined : Number(body.cpuLogicalProcessors),
+          ramTotalBytes: body.totalRamBytes === undefined ? undefined : Number(body.totalRamBytes),
+          gpuModel: body.gpuModel || undefined,
+          motherboard: body.motherboard || undefined,
+          biosVersion: body.biosVersion || undefined,
+          systemArchitecture: body.osArchitecture || undefined,
+          osVersion: body.osVersion || body.osName || undefined,
+          osBuild: body.osBuild || undefined,
+          storageDevices: [],
+          lastUpdated: timestamp
+        }
       });
+      // Pairing material is single-use; the returned agent token is required
+      // for every later heartbeat and telemetry upload.
+      device.registrationCode = '';
       await save(env, state);
       return json({ success: true, token: deviceToken, deviceToken, deviceId: device.id, heartbeatIntervalSec: 10, message: 'Device successfully registered and active.' });
     }
@@ -131,7 +246,7 @@ export default {
     if ((path === '/api/agent/heartbeat' || path === '/api/agent/telemetry') && request.method === 'POST') {
       const body = await request.json() as Json;
       const deviceToken = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || String(body.deviceToken || '');
-      const device = (state.devices as Json[]).find(item => item.deviceToken === deviceToken || (body.deviceId && item.id === body.deviceId));
+      const device = (state.devices as Json[]).find(item => item.deviceToken === deviceToken && (!body.deviceId || item.id === body.deviceId));
       if (!device) return json({ success: false, error: 'Unauthorized device token.' }, 401);
       const timestamp = String(body.timestamp || now());
       Object.assign(device, { status: 'Online', connectionState: 'connected', lastHeartbeatAt: timestamp, lastOnlineAt: timestamp, offlineSince: undefined });
@@ -142,11 +257,16 @@ export default {
         // The dashboard reads the current snapshot from each device record.
         device.latestTelemetry = latestTelemetry;
         state.telemetry = telemetry;
+        const history = state.telemetryHistory as Record<string, Json[]>;
+        const snapshots = history[String(device.id)] || [];
+        snapshots.push({ timestamp, cpuUsagePercent: latestTelemetry.cpuUsagePercent, cpuTempC: latestTelemetry.cpuTempC, ramUsagePercent: latestTelemetry.ramUsagePercent, networkInKbps: latestTelemetry.network && typeof latestTelemetry.network === 'object' ? Math.round(Number((latestTelemetry.network as Json).bytesInPerSec || 0) / 1024) : undefined, networkOutKbps: latestTelemetry.network && typeof latestTelemetry.network === 'object' ? Math.round(Number((latestTelemetry.network as Json).bytesOutPerSec || 0) / 1024) : undefined });
+        history[String(device.id)] = snapshots.slice(-Number((state.settings as Json).telemetryRetentionPoints || 1440));
         if (body.network && typeof body.network === 'object') {
           const network = body.network as Json;
           device.ipAddress = network.ip || device.ipAddress;
           device.macAddress = network.mac || device.macAddress;
         }
+        evaluateTelemetry(state, device, latestTelemetry);
       }
       await save(env, state);
       return json({ success: true, timestamp, status: device.status, activeIssues: Number(device.activeIssueCount || 0) });
@@ -190,13 +310,24 @@ export default {
     if (!user) return json({ error: 'Authentication is required.' }, 401);
 
     if (path === '/api/reports/summary' && request.method === 'GET') return json(summary(state));
-    if (path === '/api/devices' && request.method === 'GET') return json(state.devices);
+    const exportMatch = path.match(/^\/api\/reports\/export\/(devices|issues|tickets|maintenance)$/);
+    if (exportMatch && request.method === 'GET') {
+      const type = exportMatch[1];
+      if (type === 'devices') return csvDownload('devices-inventory.csv', ['Asset ID', 'Device Name', 'Type', 'Assigned User', 'Status', 'IP Address', 'Operating System', 'Last Seen'], (state.devices as Json[]).map(device => [device.assetId, device.deviceName, device.deviceType, device.assignedUser, device.status, device.ipAddress, device.operatingSystem, device.lastHeartbeatAt]));
+      if (type === 'issues') return csvDownload('diagnostic-issues.csv', ['Device', 'Asset ID', 'Finding', 'Severity', 'Status', 'Observed Value', 'Threshold', 'Detected At', 'Resolved At'], (state.issues as Json[]).map(issue => [issue.deviceName, issue.assetId, issue.title, issue.severity, issue.status, (issue.evidence as Json | undefined)?.currentValue, (issue.evidence as Json | undefined)?.thresholdValue, issue.detectedAt, issue.resolvedAt]));
+      if (type === 'tickets') return csvDownload('repair-tickets.csv', ['Incident', 'Device', 'Asset ID', 'Problem', 'Severity', 'Priority', 'Status', 'Technician', 'Detected', 'Resolution'], (state.tickets as Json[]).map(ticket => [ticket.ticketNumber, ticket.deviceName, ticket.assetId, ticket.problem || ticket.title, ticket.severity, ticket.priority, ticket.status, ticket.assignedTechnicianName, ticket.detectedDate, ticket.resolution]));
+      return csvDownload('maintenance-history.csv', ['Work Order', 'Device', 'Asset ID', 'Date', 'Technician', 'Problem', 'Action Performed', 'Parts Replaced', 'Result', 'Cost'], (state.maintenance as Json[]).map(record => [record.recordNumber, record.deviceName, record.assetId, record.date, record.technicianName, record.problem, record.actionPerformed, record.partsReplaced, record.result, record.cost]));
+    }
+    if (path === '/api/devices' && request.method === 'GET') return json((state.devices as Json[]).map(device => publicDevice(state, device, user.role)));
     const deviceMatch = path.match(/^\/api\/devices\/([^/]+)$/);
     if (deviceMatch && request.method === 'GET') {
       const device = (state.devices as Json[]).find(item => item.id === deviceMatch[1]);
-      return device ? json(device) : json({ error: 'Device not found.' }, 404);
+      return device ? json(publicDevice(state, device, user.role)) : json({ error: 'Device not found.' }, 404);
     }
+    const historyMatch = path.match(/^\/api\/devices\/([^/]+)\/telemetry\/history$/);
+    if (historyMatch && request.method === 'GET') return json(((state.telemetryHistory as Record<string, Json[]>)[historyMatch[1]] || []));
     if (deviceMatch && request.method === 'DELETE') {
+      if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403);
       const devices = state.devices as Json[];
       const index = devices.findIndex(item => item.id === deviceMatch[1]);
       if (index < 0) return json({ error: 'Device not found.' }, 404);
@@ -263,13 +394,14 @@ export default {
       return json({ success: true, session: event, rdpUri: `ms-rd:full address=s:${encodeURIComponent(host)}`, manualCommand: `mstsc /v:${host}`, note: 'Cloudflare authorizes and audits this launch; the RDP connection still travels only over your approved LAN or VPN.' });
     }
     if (path === '/api/devices' && request.method === 'POST') {
+      if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403);
       const body = await request.json() as Json;
       if (!body.deviceName || !body.assetId) return json({ error: 'Device name and Asset ID are required.' }, 400);
       const devices = state.devices as Json[];
       if (devices.some(device => String(device.assetId).toLowerCase() === String(body.assetId).toLowerCase())) return json({ error: 'Asset ID is already registered.' }, 409);
-      const device: Json = { ...body, id: id('dev'), registrationCode: `REG-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, deviceToken: `devtok_${crypto.randomUUID().replaceAll('-', '')}`, deviceType: body.deviceType || 'Desktop', assignedUser: body.assignedUser || 'Unassigned', status: 'Waiting for Agent Connection', connectionState: 'never_connected', registeredAt: now() };
+      const device: Json = { ...body, id: id('dev'), registrationCode: `REG-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, registrationExpiresAt: Date.now() + 24 * 60 * 60 * 1000, deviceToken: `devtok_${crypto.randomUUID().replaceAll('-', '')}`, deviceType: body.deviceType || 'Desktop', assignedUser: body.assignedUser || 'Unassigned', status: 'Waiting for Agent Connection', connectionState: 'never_connected', registeredAt: now() };
       devices.unshift(device); (state.notifications as Json[]).unshift({ id: id('notif'), title: `Device Added: ${device.deviceName}`, message: 'Install the monitoring agent to start telemetry.', type: 'info', deviceId: device.id, deviceName: device.deviceName, isRead: false, createdAt: now() });
-      await save(env, state); return json(device, 201);
+      await save(env, state); return json(publicDevice(state, device, user.role), 201);
     }
     if (path === '/api/notifications' && request.method === 'GET') return json(state.notifications);
     if (path === '/api/notifications/read-all' && request.method === 'POST') { (state.notifications as Json[]).forEach(notification => notification.isRead = true); await save(env, state); return json({ success: true }); }
@@ -341,8 +473,93 @@ export default {
       await save(env, state);
       return json({ success: true });
     }
-    if (path === '/api/org/departments' || path === '/api/org/locations') return json(path.endsWith('departments') ? state.departments : state.locations);
-    if (['/api/tickets', '/api/diagnostics/issues', '/api/maintenance', '/api/audit'].includes(path)) return json([]);
+    if (path === '/api/org/departments') {
+      if (request.method === 'GET') return json((state.departments as Json[]).map(department => ({ ...department, deviceCount: (state.devices as Json[]).filter(device => device.departmentId === department.id).length })));
+      if (request.method === 'POST') {
+        if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403);
+        const body = await request.json() as Json; const name = String(body.name || '').trim(); const code = String(body.code || '').trim().toUpperCase();
+        if (!name || !code) return json({ error: 'Department name and code are required.' }, 400);
+        if ((state.departments as Json[]).some(item => String(item.code).toUpperCase() === code)) return json({ error: 'Department code already exists.' }, 409);
+        const department: Json = { id: id('dept'), name, code, description: String(body.description || ''), headName: String(body.headOfDepartment || body.headName || ''), email: String(body.email || ''), createdAt: now() };
+        (state.departments as Json[]).push(department); await save(env, state); return json(department, 201);
+      }
+    }
+    if (path === '/api/org/locations') {
+      if (request.method === 'GET') return json((state.locations as Json[]).map(location => ({ ...location, deviceCount: (state.devices as Json[]).filter(device => device.locationId === location.id).length })));
+      if (request.method === 'POST') {
+        if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403);
+        const body = await request.json() as Json; const name = String(body.name || '').trim();
+        if (!name) return json({ error: 'Location name is required.' }, 400);
+        const location: Json = { id: id('loc'), name, type: body.type || 'Laboratory', building: String(body.building || ''), floor: String(body.floor || ''), roomNumber: String(body.roomNumber || ''), departmentId: body.departmentId || undefined, description: String(body.description || ''), createdAt: now() };
+        (state.locations as Json[]).push(location); await save(env, state); return json(location, 201);
+      }
+    }
+    if (path === '/api/settings') {
+      if (request.method === 'GET') return json(state.settings);
+      if (request.method === 'PUT') {
+        if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403);
+        const body = await request.json() as Json; const settings = state.settings as Json;
+        for (const field of ['heartbeatIntervalSec', 'connectionLostThresholdSec', 'offlineThresholdSec', 'telemetryRetentionPoints']) if (body[field] !== undefined && Number.isFinite(Number(body[field]))) settings[field] = Number(body[field]);
+        for (const field of ['autoCreateTicketOnCritical', 'enableSoundAlerts']) if (body[field] !== undefined) settings[field] = Boolean(body[field]);
+        await save(env, state); return json(settings);
+      }
+    }
+    if (path === '/api/diagnostics/rules' && request.method === 'GET') return json(state.diagnosticRules);
+    const ruleMatch = path.match(/^\/api\/diagnostics\/rules\/([^/]+)$/);
+    if (ruleMatch && request.method === 'PUT') {
+      if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403);
+      const rule = (state.diagnosticRules as Json[]).find(item => item.id === ruleMatch[1]); if (!rule) return json({ error: 'Diagnostic rule not found.' }, 404);
+      const body = await request.json() as Json;
+      for (const field of ['thresholdValue', 'durationSeconds', 'severity', 'enabled', 'autoCreateTicket', 'description']) if (body[field] !== undefined) rule[field] = body[field];
+      await save(env, state); return json(rule);
+    }
+    if (path === '/api/diagnostics/issues' && request.method === 'GET') {
+      const deviceId = url.searchParams.get('deviceId'); const status = url.searchParams.get('status');
+      return json((state.issues as Json[]).filter(issue => (!deviceId || issue.deviceId === deviceId) && (!status || issue.status === status)));
+    }
+    const issueStatusMatch = path.match(/^\/api\/diagnostics\/issues\/([^/]+)\/status$/);
+    if (issueStatusMatch && (request.method === 'PUT' || request.method === 'POST')) {
+      if (!['super_admin', 'it_admin', 'technician'].includes(String(user.role))) return json({ error: 'Technician or administrator permission is required.' }, 403);
+      const issue = (state.issues as Json[]).find(item => item.id === issueStatusMatch[1]); if (!issue) return json({ error: 'Diagnostic issue not found.' }, 404);
+      const body = await request.json() as Json; issue.status = body.status || issue.status; if (issue.status === 'Resolved') issue.resolvedAt = now(); await save(env, state); return json(issue);
+    }
+    if (path === '/api/tickets') {
+      if (request.method === 'GET') { const deviceId = url.searchParams.get('deviceId'); return json((state.tickets as Json[]).filter(ticket => !deviceId || ticket.deviceId === deviceId)); }
+      if (request.method === 'POST') {
+        if (!['super_admin', 'it_admin', 'technician'].includes(String(user.role))) return json({ error: 'Technician or administrator permission is required.' }, 403);
+        const body = await request.json() as Json; const device = (state.devices as Json[]).find(item => item.id === body.deviceId);
+        if (!device || !String(body.problem || body.title || '').trim()) return json({ error: 'A valid device and problem summary are required.' }, 400);
+        const number = `INC-${new Date().getUTCFullYear()}-${String((state.tickets as Json[]).length + 1).padStart(4, '0')}`; const detectedDate = now();
+        const problem = String(body.problem || body.title).trim(); const diagnosis = String(body.diagnosis || body.description || '').trim();
+        const ticket: Json = { id: id('ticket'), ticketNumber: number, deviceId: device.id, deviceName: device.deviceName, assetId: device.assetId, issueId: body.diagnosticIssueId || body.issueId, problem, diagnosis, title: problem, description: diagnosis, severity: body.severity || 'Medium', priority: body.priority || 'Medium', status: body.assignedTechnicianName ? 'Assigned' : 'Open', assignedTechnicianName: body.assignedTechnicianName || undefined, detectedDate, notes: body.notes ? [{ id: id('note'), userId: user.id, userName: user.fullName, userRole: user.role, text: String(body.notes), createdAt: detectedDate }] : [], attachments: [], createdAt: detectedDate, updatedAt: detectedDate };
+        (state.tickets as Json[]).unshift(ticket); await save(env, state); return json(ticket, 201);
+      }
+    }
+    const ticketMatch = path.match(/^\/api\/tickets\/([^/]+)$/);
+    if (ticketMatch && request.method === 'PUT') {
+      if (!['super_admin', 'it_admin', 'technician'].includes(String(user.role))) return json({ error: 'Technician or administrator permission is required.' }, 403);
+      const ticket = (state.tickets as Json[]).find(item => item.id === ticketMatch[1]); if (!ticket) return json({ error: 'Ticket not found.' }, 404); const body = await request.json() as Json;
+      for (const field of ['status', 'priority', 'severity', 'assignedTechnicianName', 'resolution']) if (body[field] !== undefined) ticket[field] = body[field];
+      if (ticket.status === 'Resolved') { ticket.resolvedDate ||= now(); ticket.verificationStatus ||= 'Pending'; } if (ticket.status === 'Closed' && ticket.verificationStatus !== 'Passed') return json({ error: 'Post-repair verification must pass before closure.' }, 409);
+      ticket.updatedAt = now(); await save(env, state); return json(ticket);
+    }
+    const ticketResolveMatch = path.match(/^\/api\/tickets\/([^/]+)\/resolve$/);
+    if (ticketResolveMatch && request.method === 'POST') {
+      const ticket = (state.tickets as Json[]).find(item => item.id === ticketResolveMatch[1]); if (!ticket) return json({ error: 'Ticket not found.' }, 404); const body = await request.json() as Json;
+      if (!String(body.resolution || '').trim()) return json({ error: 'Resolution notes are required.' }, 400);
+      ticket.status = 'Resolved'; ticket.resolution = body.resolution; ticket.resolvedDate = now(); ticket.verificationStatus = 'Pending'; ticket.updatedAt = now();
+      if (body.createMaintenanceRecord) { const record: Json = { id: id('mnt'), recordNumber: `MNT-${new Date().getUTCFullYear()}-${String((state.maintenance as Json[]).length + 1).padStart(4, '0')}`, deviceId: ticket.deviceId, deviceName: ticket.deviceName, assetId: ticket.assetId, ticketId: ticket.id, ticketNumber: ticket.ticketNumber, date: now(), technicianId: user.id, technicianName: user.fullName, problem: ticket.problem, diagnosis: ticket.diagnosis, actionPerformed: body.actionPerformed || body.resolution, partsReplaced: body.partsReplaced || '', result: 'Resolved', notes: body.resolution, createdAt: now() }; (state.maintenance as Json[]).unshift(record); }
+      await save(env, state); return json(ticket);
+    }
+    if (path === '/api/maintenance') {
+      if (request.method === 'GET') { const deviceId = url.searchParams.get('deviceId'); return json((state.maintenance as Json[]).filter(record => !deviceId || record.deviceId === deviceId)); }
+      if (request.method === 'POST') {
+        if (!['super_admin', 'it_admin', 'technician'].includes(String(user.role))) return json({ error: 'Technician or administrator permission is required.' }, 403);
+        const body = await request.json() as Json; const device = (state.devices as Json[]).find(item => item.id === body.deviceId); if (!device || !String(body.actionPerformed || '').trim()) return json({ error: 'A valid device and action performed are required.' }, 400);
+        const record: Json = { id: id('mnt'), recordNumber: `MNT-${new Date().getUTCFullYear()}-${String((state.maintenance as Json[]).length + 1).padStart(4, '0')}`, deviceId: device.id, deviceName: device.deviceName, assetId: device.assetId, date: now(), technicianId: user.id, technicianName: body.technicianName || user.fullName, problem: body.problem || 'Preventive maintenance', diagnosis: body.diagnosis || '', actionPerformed: body.actionPerformed, partsReplaced: body.partsReplaced || '', result: body.result || 'Completed', cost: Number(body.cost || 0), notes: body.notes || '', createdAt: now() }; (state.maintenance as Json[]).unshift(record); await save(env, state); return json(record, 201);
+      }
+    }
+    if (path === '/api/audit' && request.method === 'GET') { if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required.' }, 403); const limit = Math.min(Number(url.searchParams.get('limit') || 200), 500); return json((state.auditLogs as Json[]).slice(0, limit)); }
     return json({ error: 'Endpoint not yet migrated to the Cloudflare API.' }, 404);
     } catch (error) {
       console.error(JSON.stringify({ event: 'api_error', path: new URL(request.url).pathname, message: error instanceof Error ? error.message : String(error) }));
@@ -351,5 +568,21 @@ export default {
       }
       return json({ error: 'The monitoring service encountered an unexpected error.' }, 500);
     }
+  }
+  ,async scheduled(_controller: { cron?: string }, env: Env, ctx: { waitUntil: (promise: Promise<unknown>) => void }): Promise<void> {
+    ctx.waitUntil((async () => {
+      const state = await load(env);
+      const offlineThresholdMs = Number((state.settings as Json).offlineThresholdSec || 300) * 1000;
+      let changed = false;
+      for (const device of state.devices as Json[]) {
+        if (device.status === 'Waiting for Agent Connection' || !device.lastHeartbeatAt) continue;
+        const elapsed = Date.now() - new Date(String(device.lastHeartbeatAt)).getTime();
+        if (elapsed > offlineThresholdMs && device.connectionState !== 'offline') {
+          device.connectionState = 'offline'; device.status = 'Offline'; device.offlineSince = now(); changed = true;
+          (state.notifications as Json[]).unshift({ id: id('notif'), title: `Device Offline: ${device.deviceName}`, message: `No agent heartbeat for ${Math.round(elapsed / 1000)} seconds.`, type: 'offline', deviceId: device.id, deviceName: device.deviceName, isRead: false, createdAt: now() });
+        }
+      }
+      if (changed) { state.notifications = (state.notifications as Json[]).slice(0, 500); await save(env, state); }
+    })());
   }
 };

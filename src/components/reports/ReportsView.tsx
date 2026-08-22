@@ -37,8 +37,22 @@ export const ReportsView: React.FC = () => {
     }
   ];
 
-  const handleExport = (typeId: string) => {
-    window.open(`/api/reports/export/${typeId}`, '_blank');
+  const handleExport = async (typeId: string, filename: string) => {
+    setDownloading(typeId);
+    try {
+      const response = await fetch(`/api/reports/export/${typeId}`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Unable to generate the report.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Unable to generate the report.');
+    } finally {
+      setDownloading(null);
+    }
   };
 
   return (
@@ -94,11 +108,12 @@ export const ReportsView: React.FC = () => {
                   <CheckCircle2 className="w-3.5 h-3.5" /> Ready for Export (CSV)
                 </span>
                 <button
-                  onClick={() => handleExport(rep.id)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-xs"
+                  onClick={() => handleExport(rep.id, rep.filename)}
+                  disabled={downloading === rep.id}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors shadow-xs"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download CSV</span>
+                  <span>{downloading === rep.id ? 'Preparing…' : 'Download CSV'}</span>
                 </button>
               </div>
             </div>

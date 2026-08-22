@@ -25,6 +25,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onSelectDevice
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [exporting, setExporting] = useState<boolean>(false);
 
   useEffect(() => {
     fetchRecords();
@@ -54,6 +55,17 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onSelectDevice
     return true;
   });
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch('/api/reports/export/maintenance');
+      if (!response.ok) throw new Error('Unable to export maintenance history.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a'); link.href = url; link.download = 'maintenance-history.csv'; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Unable to export maintenance history.'); }
+    finally { setExporting(false); }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -71,13 +83,15 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onSelectDevice
         </div>
 
         <div className="flex items-center gap-2">
-          <a
-            href="/api/reports/export/maintenance"
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
-          </a>
+            <span>{exporting ? 'Preparing…' : 'Export CSV'}</span>
+          </button>
 
           {user?.role !== 'viewer' && (
             <button
