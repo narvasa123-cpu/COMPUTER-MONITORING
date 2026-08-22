@@ -15,8 +15,9 @@ export const UsersView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRole>('technician');
-  const [password, setPassword] = useState('admin123');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -25,9 +26,15 @@ export const UsersView: React.FC = () => {
   const fetchUsers = async () => {
     try {
       const res = await fetch('/api/users');
-      if (res.ok) setUsers(await res.json());
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Unable to load user accounts.');
+      }
+      setUsers(await res.json());
+      setError(null);
     } catch (err) {
       console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to load user accounts.');
     } finally {
       setLoading(false);
     }
@@ -35,7 +42,10 @@ export const UsersView: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !email || !fullName) return;
+    if (!username || !email || !fullName || password.length < 8) {
+      setError('Complete all fields and choose a temporary password with at least 8 characters.');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch('/api/users', {
@@ -43,27 +53,28 @@ export const UsersView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, fullName, role, password })
       });
-      if (res.ok) {
-        await fetchUsers();
-        setIsModalOpen(false);
-        setUsername('');
-        setEmail('');
-        setFullName('');
-      }
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'Unable to create the user account.'); }
+      await fetchUsers();
+      setIsModalOpen(false);
+      setUsername('');
+      setEmail('');
+      setFullName('');
+      setPassword('');
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to create the user account.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user account?')) return;
+    if (!confirm('Deactivate this user account? Their login sessions will be ended, but the audit history will be preserved.')) return;
     try {
       const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
-      if (res.ok) await fetchUsers();
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'Unable to deactivate the user account.'); }
+      await fetchUsers();
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to deactivate the user account.');
     }
   };
 
@@ -86,6 +97,8 @@ export const UsersView: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        {error && <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{error}</div>}
+        {loading && <div className="p-8 text-center text-xs text-slate-500">Loading user accounts…</div>}
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
             <tr>
@@ -98,6 +111,9 @@ export const UsersView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
+            {!loading && users.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">No user accounts are available for this organization.</td></tr>
+            )}
             {users.map(u => (
               <tr key={u.id} className="hover:bg-slate-50">
                 <td className="py-3 px-4">

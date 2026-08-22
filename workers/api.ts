@@ -61,7 +61,8 @@ function requireUser(state: Json, request: Request) {
   const sessions = state.sessions as Record<string, { userId: string; expiresAt: number }>;
   const session = token(request) && sessions[token(request)!];
   if (!session || session.expiresAt < Date.now()) return null;
-  return (state.users as Json[]).find(user => user.id === session.userId) || null;
+  const account = (state.users as Json[]).find(user => user.id === session.userId);
+  return account && account.active !== false ? account : null;
 }
 
 function safeUser(user: Json) {
@@ -170,10 +171,12 @@ export default {
 
     if (path === '/api/auth/login' && request.method === 'POST') {
       const body = await request.json() as Json;
-      const account = (state.users as Json[]).find(user => user.username === body.username || user.email === body.username);
-      if (!account || account.passwordHash !== await hash(String(body.password || ''))) return json({ error: 'Invalid username or password.' }, 401);
+      const suppliedUsername = String(body.username || '').trim().toLowerCase();
+      const account = (state.users as Json[]).find(user => String(user.username).toLowerCase() === suppliedUsername || String(user.email).toLowerCase() === suppliedUsername);
+      if (!account || account.active === false || account.passwordHash !== await hash(String(body.password || ''))) return json({ error: 'Invalid username or password.' }, 401);
       const sessionToken = `sess_${crypto.randomUUID().replaceAll('-', '')}`;
       (state.sessions as Record<string, Json>)[sessionToken] = { userId: String(account.id), expiresAt: Date.now() + 86400000 };
+      account.lastLoginAt = now();
       await save(env, state);
       return json({ success: true, token: sessionToken, user: safeUser(account) });
     }
@@ -272,8 +275,74 @@ export default {
     if (path === '/api/notifications/read-all' && request.method === 'POST') { (state.notifications as Json[]).forEach(notification => notification.isRead = true); await save(env, state); return json({ success: true }); }
     const readMatch = path.match(/^\/api\/notifications\/([^/]+)\/read$/);
     if (readMatch && request.method === 'POST') { const notification = (state.notifications as Json[]).find(item => item.id === readMatch[1]); if (notification) notification.isRead = true; await save(env, state); return json({ success: true }); }
+
+    // User accounts are real persisted identities. Password hashes remain in
+    // the server-side state and are never included in any browser response.
+    if (path === '/api/users' && request.method === 'GET') {
+      return json((state.users as Json[]).map(safeUser));
+    }
+    if (path === '/api/users' && request.method === 'POST') {
+      if (user.role !== 'super_admin') return json({ error: 'Only a super administrator can create user accounts.' }, 403);
+      const body = await request.json() as Json;
+      const username = String(body.username || '').trim();
+      const email = String(body.email || '').trim().toLowerCase();
+      const fullName = String(body.fullName || '').trim();
+      const password = String(body.password || '');
+      const role = String(body.role || '');
+      const allowedRoles = ['super_admin', 'it_admin', 'technician', 'department_head', 'viewer'];
+      if (!username || !email || !fullName || !email.includes('@') || password.length < 8 || !allowedRoles.includes(role)) {
+        return json({ error: 'Enter a unique username, valid email, full name, role, and a password of at least 8 characters.' }, 400);
+      }
+      const users = state.users as Json[];
+      if (users.some(account => String(account.username).toLowerCase() === username.toLowerCase() || String(account.email).toLowerCase() === email)) return json({ error: 'That username or email address is already in use.' }, 409);
+      const account: Json = { id: id('user'), username, email, fullName, role, passwordHash: await hash(password), departmentId: body.departmentId || undefined, active: true, mustChangePassword: true, createdAt: now() };
+      users.push(account);
+      const audit = (state.auditLogs as Json[] | undefined) || [];
+      audit.unshift({ id: id('audit'), userId: user.id, userName: user.fullName, userRole: user.role, action: 'USER_CREATED', entityType: 'User', entityId: account.id, details: `Created ${username} with role ${role}.`, timestamp: now() });
+      state.auditLogs = audit.slice(0, 500);
+      await save(env, state);
+      return json(safeUser(account), 201);
+    }
+    const userMatch = path.match(/^\/api\/users\/([^/]+)$/);
+    if (userMatch && request.method === 'PUT') {
+      if (user.role !== 'super_admin') return json({ error: 'Only a super administrator can update user accounts.' }, 403);
+      const account = (state.users as Json[]).find(item => item.id === userMatch[1]);
+      if (!account) return json({ error: 'User account not found.' }, 404);
+      const body = await request.json() as Json;
+      const allowedRoles = ['super_admin', 'it_admin', 'technician', 'department_head', 'viewer'];
+      if (body.email !== undefined) {
+        const email = String(body.email).trim().toLowerCase();
+        if (!email.includes('@')) return json({ error: 'Enter a valid email address.' }, 400);
+        if ((state.users as Json[]).some(item => item.id !== account.id && String(item.email).toLowerCase() === email)) return json({ error: 'That email address is already in use.' }, 409);
+        account.email = email;
+      }
+      if (body.fullName !== undefined && String(body.fullName).trim()) account.fullName = String(body.fullName).trim();
+      if (body.role !== undefined) { if (!allowedRoles.includes(String(body.role))) return json({ error: 'Invalid role.' }, 400); account.role = body.role; }
+      if (body.departmentId !== undefined) account.departmentId = body.departmentId || undefined;
+      if (body.password !== undefined) { const password = String(body.password); if (password.length < 8) return json({ error: 'Password must contain at least 8 characters.' }, 400); account.passwordHash = await hash(password); account.mustChangePassword = true; }
+      if (body.active === true) { account.active = true; account.deactivatedAt = undefined; }
+      const audit = (state.auditLogs as Json[] | undefined) || [];
+      audit.unshift({ id: id('audit'), userId: user.id, userName: user.fullName, userRole: user.role, action: 'USER_UPDATED', entityType: 'User', entityId: account.id, details: `Updated ${account.username}.`, timestamp: now() }); state.auditLogs = audit.slice(0, 500);
+      await save(env, state); return json(safeUser(account));
+    }
+    if (userMatch && request.method === 'DELETE') {
+      if (user.role !== 'super_admin') return json({ error: 'Only a super administrator can deactivate user accounts.' }, 403);
+      const users = state.users as Json[];
+      const removed = users.find(account => account.id === userMatch[1]);
+      if (!removed) return json({ error: 'User account not found.' }, 404);
+      if (String(removed.id) === String(user.id) || removed.id === 'user-superadmin-01') return json({ error: 'You cannot deactivate this protected administrator account.' }, 409);
+      if (removed.role === 'super_admin' && users.filter(account => account.role === 'super_admin' && account.active !== false).length <= 1) return json({ error: 'At least one active super administrator must remain.' }, 409);
+      removed.active = false; removed.deactivatedAt = now();
+      const sessions = state.sessions as Record<string, Json>;
+      for (const [key, session] of Object.entries(sessions)) if (session.userId === removed.id) delete sessions[key];
+      const audit = (state.auditLogs as Json[] | undefined) || [];
+      audit.unshift({ id: id('audit'), userId: user.id, userName: user.fullName, userRole: user.role, action: 'USER_DEACTIVATED', entityType: 'User', entityId: removed.id, details: `Deactivated ${removed.username}.`, timestamp: now() });
+      state.auditLogs = audit.slice(0, 500);
+      await save(env, state);
+      return json({ success: true });
+    }
     if (path === '/api/org/departments' || path === '/api/org/locations') return json(path.endsWith('departments') ? state.departments : state.locations);
-    if (['/api/tickets', '/api/diagnostics/issues', '/api/maintenance', '/api/users', '/api/audit'].includes(path)) return json([]);
+    if (['/api/tickets', '/api/diagnostics/issues', '/api/maintenance', '/api/audit'].includes(path)) return json([]);
     return json({ error: 'Endpoint not yet migrated to the Cloudflare API.' }, 404);
     } catch (error) {
       console.error(JSON.stringify({ event: 'api_error', path: new URL(request.url).pathname, message: error instanceof Error ? error.message : String(error) }));
