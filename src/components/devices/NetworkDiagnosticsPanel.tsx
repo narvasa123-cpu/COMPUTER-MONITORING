@@ -7,6 +7,9 @@ type TestScope = 'gateway' | 'dns' | 'internet' | 'full';
 interface NetworkDiagnosticsPanelProps {
   device: Device;
   canRunDiagnostics: boolean;
+  /** Present only for roles allowed to generate/request an agent update. */
+  canUpdateAgent?: boolean;
+  onUpdateAgent?: () => void;
 }
 
 const statusStyle: Record<string, string> = {
@@ -51,7 +54,7 @@ const resultStyle = (result?: string) => result === 'PASS'
     ? 'bg-rose-100 text-rose-800'
     : 'bg-slate-100 text-slate-600';
 
-export const NetworkDiagnosticsPanel: React.FC<NetworkDiagnosticsPanelProps> = ({ device, canRunDiagnostics }) => {
+export const NetworkDiagnosticsPanel: React.FC<NetworkDiagnosticsPanelProps> = ({ device, canRunDiagnostics, canUpdateAgent = false, onUpdateAgent }) => {
   const [data, setData] = useState<NetworkDiagnosticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<TestScope | null>(null);
@@ -145,7 +148,7 @@ export const NetworkDiagnosticsPanel: React.FC<NetworkDiagnosticsPanelProps> = (
       </div>
 
       {agentOffline && <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><WifiOff className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>Monitoring Agent Offline.</strong> A live test cannot run until the agent reconnects. Last known network data is marked stale and is not presented as live.</div></div>}
-      {!agentOffline && !commandCapable && <div className="flex gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>On-demand diagnostics unavailable.</strong> This agent has not reported the Wi-Fi diagnostic command capability. Download and run the current Windows PowerShell agent, then wait for its next telemetry upload. No command has been sent.</div></div>}
+      {!commandCapable && <div className="flex flex-col gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-2"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>On-demand diagnostics unavailable.</strong> This agent has not reported the Wi-Fi diagnostic command capability. No diagnostic command has been sent. Update the Windows agent on this physical computer, then wait for its next telemetry upload.</div></div>{canUpdateAgent && onUpdateAgent && <button type="button" onClick={onUpdateAgent} className="shrink-0 rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-xs font-bold text-sky-800 hover:bg-sky-100">Update Windows agent</button>}</div>}
       {data?.pendingCommand && <div className="flex gap-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900"><Clock className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>Network diagnostic {data.pendingCommand.status}.</strong> The agent checks for commands on its next telemetry cycle, then uploads a fresh full diagnostic. The dashboard refreshes this command state automatically.</div></div>}
       {!data?.pendingCommand && data?.lastCommand?.status === 'completed' && <div className="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>Latest requested diagnostic completed.</strong> Review the agent-measured result and timestamp below; a completed command is not treated as a successful network connection by itself.</div></div>}
       {!data?.pendingCommand && data?.lastCommand?.status === 'expired' && <div role="alert" className="flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>Latest diagnostic request expired.</strong> The agent did not collect it before the command expired. Confirm the agent is online, then run it again.</div></div>}

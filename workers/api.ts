@@ -1,4 +1,4 @@
-import { generateNodeAgent, generatePowerShellAgent, generatePythonAgent } from '../server/agent-templates';
+import { generateNodeAgent, generatePowerShellAgent, generatePythonAgent, POWERSHELL_AGENT_CAPABILITIES, POWERSHELL_AGENT_VERSION } from '../server/agent-templates';
 import { permanentlyPurgeDeviceData } from '../src/lib/device-purge';
 
 interface Env {
@@ -373,11 +373,23 @@ function safeUser(user: Json) {
   return safe;
 }
 
-function agentDownload(type: string, serverUrl: string, registrationCode: string) {
-  if (type === 'powershell') return { body: generatePowerShellAgent(serverUrl, registrationCode), filename: 'pc-monitoring-agent.ps1', contentType: 'text/plain; charset=utf-8' };
+function agentDownload(type: string, serverUrl: string, registrationCode: string, expectedDeviceId = '') {
+  if (type === 'powershell') return { body: generatePowerShellAgent(serverUrl, registrationCode, expectedDeviceId), filename: 'pc-monitoring-agent.ps1', contentType: 'text/plain; charset=utf-8' };
   if (type === 'python') return { body: generatePythonAgent(serverUrl, registrationCode), filename: 'pc-monitoring-agent.py', contentType: 'text/x-python; charset=utf-8' };
   if (type === 'node') return { body: generateNodeAgent(serverUrl, registrationCode), filename: 'pc-monitoring-agent.mjs', contentType: 'application/javascript; charset=utf-8' };
   return null;
+}
+
+function pairedAgentDevice(state: Json, request: Request, deviceId: string | null) {
+  const deviceToken = token(request);
+  if (!deviceId || !deviceToken) return null;
+  return (state.devices as Json[]).find(device => String(device.id) === deviceId && String(device.deviceToken) === deviceToken) || null;
+}
+
+function auditAgentUpdate(state: Json, user: Json, device: Json, action: string, details: string) {
+  const logs = state.auditLogs as Json[];
+  logs.unshift({ id: id('audit'), userId: user.id, userName: user.fullName, userRole: user.role, action, entityType: 'Agent', entityId: device.id, details, timestamp: now() });
+  state.auditLogs = logs.slice(0, 500);
 }
 
 function summary(state: Json) {
@@ -457,9 +469,43 @@ export default {
     if (downloadMatch && request.method === 'GET') {
       const registrationCode = url.searchParams.get('code')?.trim().toUpperCase() || '';
       if (!registrationCode) return json({ error: 'A registration code is required.' }, 400);
+      const pairedDevice = (state.devices as Json[]).find(device => String(device.registrationCode || '').toUpperCase() === registrationCode);
+      if (!pairedDevice || (pairedDevice.registrationExpiresAt && Number(pairedDevice.registrationExpiresAt) < Date.now())) {
+        return json({ error: 'The registration code is invalid, expired, or already used.' }, 401);
+      }
       const script = agentDownload(downloadMatch[1], url.origin, registrationCode);
       if (!script) return json({ error: 'Supported types: powershell, python, node' }, 400);
       return new Response(script.body, { headers: { ...cors, 'Content-Type': script.contentType, 'Content-Disposition': `attachment; filename="${script.filename}"` } });
+    }
+
+    // Update artifacts are never exposed to the browser or paired by a
+    // registration code. Only the exact existing device bearer token may read
+    // the manifest/package for that same device.
+    const updateArtifactMatch = path.match(/^\/api\/agent\/update\/powershell\/(manifest|package)$/);
+    if (updateArtifactMatch && request.method === 'GET') {
+      const device = pairedAgentDevice(state, request, url.searchParams.get('deviceId'));
+      if (!device) return json({ error: 'Unauthorized device token.' }, 401);
+      const packageBody = generatePowerShellAgent(url.origin, '', String(device.id));
+      const packageHash = await hash(packageBody);
+      if (updateArtifactMatch[1] === 'manifest') {
+        return json({
+          releaseId: `powershell-${POWERSHELL_AGENT_VERSION}`,
+          deviceId: device.id,
+          version: POWERSHELL_AGENT_VERSION,
+          requiredCapabilities: POWERSHELL_AGENT_CAPABILITIES,
+          sha256: packageHash,
+          packagePath: `/api/agent/update/powershell/package?deviceId=${encodeURIComponent(String(device.id))}`,
+          generatedAt: now()
+        });
+      }
+      const activeCommand = ((state.deviceCommands as Json[] | undefined) || []).find(command => command.deviceId === device.id && command.type === 'agent_update' && ['queued', 'dispatched'].includes(String(command.status)));
+      if (activeCommand) {
+        activeCommand.packageDeliveredAt = now();
+        device.agentUpdateStatus = 'package_delivered';
+        device.agentUpdatePackageDeliveredAt = activeCommand.packageDeliveredAt;
+        await save(env, state);
+      }
+      return new Response(packageBody, { headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="pc-monitoring-agent-update.ps1"', 'Cache-Control': 'no-store' } });
     }
 
     if (path === '/api/agent/register' && request.method === 'POST') {
@@ -505,7 +551,9 @@ export default {
 
     if ((path === '/api/agent/heartbeat' || path === '/api/agent/telemetry') && request.method === 'POST') {
       const body = await request.json() as Json;
-      const deviceToken = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || String(body.deviceToken || '');
+      // Device credentials belong in the Authorization header only. Never
+      // accept or persist an accidental JSON token field from an agent.
+      const deviceToken = token(request);
       const device = (state.devices as Json[]).find(item => item.deviceToken === deviceToken && (!body.deviceId || item.id === body.deviceId));
       if (!device) return json({ success: false, error: 'Unauthorized device token.' }, 401);
       const receivedAt = now();
@@ -517,7 +565,8 @@ export default {
       if (Array.isArray(body.agentCapabilities)) device.agentCapabilities = asArray(body.agentCapabilities);
       if (path.endsWith('/telemetry')) {
         const telemetry = (state.telemetry as Record<string, Json>) || {};
-        const latestTelemetry: Json = { ...body, deviceId: device.id, timestamp, receivedAt };
+        const { deviceToken: _bodyDeviceToken, token: _bodyToken, authorization: _bodyAuthorization, ...safeTelemetry } = body;
+        const latestTelemetry: Json = { ...safeTelemetry, deviceId: device.id, timestamp, receivedAt };
         telemetry[String(device.id)] = latestTelemetry;
         // The dashboard reads the current snapshot from each device record.
         device.latestTelemetry = latestTelemetry;
@@ -532,14 +581,46 @@ export default {
           device.macAddress = network.mac || device.macAddress;
         }
         evaluateTelemetry(state, device, latestTelemetry);
+        const commands = (state.deviceCommands as Json[] | undefined) || [];
         const commandResults = Array.isArray(body.commandResults) ? body.commandResults as Json[] : [];
         for (const result of commandResults) {
           const commandId = stringValue(result.id);
-          const command = ((state.deviceCommands as Json[] | undefined) || []).find(item => item.id === commandId && item.deviceId === device.id);
+          const command = commands.find(item => item.id === commandId && item.deviceId === device.id);
           if (command) {
-            command.status = 'completed'; command.completedAt = now(); command.result = result;
+            const resultStatus = stringValue(result.status).toLowerCase();
+            if (command.type === 'agent_update') {
+              const expectedVersion = stringValue(command.targetVersion || device.agentUpdateTargetVersion || POWERSHELL_AGENT_VERSION);
+              const requiredCapabilities = asArray(command.requiredCapabilities || POWERSHELL_AGENT_CAPABILITIES);
+              const updateVerified = resultStatus === 'applied'
+                && String(device.agentVersion || '') === expectedVersion
+                && requiredCapabilities.every(capability => hasAgentCapability(device, capability));
+              if (updateVerified) {
+                command.status = 'verified'; command.verifiedAt = now(); command.result = result;
+                device.agentUpdateStatus = 'verified'; device.agentUpdateVerifiedAt = command.verifiedAt; device.agentUpdateFailureReason = undefined;
+              } else if (resultStatus === 'failed') {
+                command.status = 'failed'; command.failedAt = now(); command.result = result;
+                device.agentUpdateStatus = 'failed'; device.agentUpdateFailureReason = stringValue(result.error) || 'The agent reported an update failure.';
+              } else {
+                command.status = 'awaiting_verification'; command.result = result;
+                device.agentUpdateStatus = 'awaiting_verification';
+              }
+            } else {
+              command.status = 'completed'; command.completedAt = now(); command.result = result;
+            }
           }
         }
+        // A restarted agent can prove a successful update even if its local
+        // receipt could not be uploaded. This is still real evidence: the
+        // authenticated telemetry reports the exact target version/capability.
+        for (const command of commands.filter(item => item.deviceId === device.id && item.type === 'agent_update' && ['queued', 'dispatched', 'awaiting_verification'].includes(String(item.status)))) {
+          const expectedVersion = stringValue(command.targetVersion || device.agentUpdateTargetVersion || POWERSHELL_AGENT_VERSION);
+          const requiredCapabilities = asArray(command.requiredCapabilities || POWERSHELL_AGENT_CAPABILITIES);
+          if (String(device.agentVersion || '') === expectedVersion && requiredCapabilities.every(capability => hasAgentCapability(device, capability))) {
+            command.status = 'verified'; command.verifiedAt = now(); command.result ||= { id: command.id, type: 'agent_update', status: 'verified_by_telemetry' };
+            device.agentUpdateStatus = 'verified'; device.agentUpdateVerifiedAt = command.verifiedAt; device.agentUpdateFailureReason = undefined;
+          }
+        }
+        state.deviceCommands = commands;
       }
       await save(env, state);
       const settings = state.settings as Json;
@@ -558,11 +639,16 @@ export default {
       let expired = false;
       for (const pending of commands.filter(item => item.deviceId === deviceId && ['queued', 'dispatched'].includes(String(item.status)) && Number(item.expiresAt || 0) <= Date.now())) {
         pending.status = 'expired'; pending.expiredAt = now(); expired = true;
+        if (pending.type === 'agent_update') {
+          device.agentUpdateStatus = 'failed';
+          device.agentUpdateFailureReason = 'The update command expired before the agent could complete it.';
+        }
       }
       const command = commands.find(item => item.deviceId === deviceId && item.status === 'queued' && Number(item.expiresAt || 0) > Date.now());
       if (!command) { if (expired) await save(env, state); return json({ command: null }); }
       command.status = 'dispatched';
       command.dispatchedAt = now();
+      if (command.type === 'agent_update') device.agentUpdateStatus = 'dispatched';
       await save(env, state);
       return json({ command });
     }
@@ -601,6 +687,49 @@ export default {
     if (deviceMatch && request.method === 'GET') {
       const device = (state.devices as Json[]).find(item => item.id === deviceMatch[1]);
       return device ? json(publicDevice(state, device, user.role)) : json({ error: 'Device not found.' }, 404);
+    }
+    const agentInstallerMatch = path.match(/^\/api\/devices\/([^/]+)\/agent-installer\/powershell$/);
+    if (agentInstallerMatch && request.method === 'GET') {
+      if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required to download an agent update package.' }, 403);
+      const device = (state.devices as Json[]).find(item => item.id === agentInstallerMatch[1]);
+      if (!device) return json({ error: 'Device not found.' }, 404);
+      if (device.connectionState === 'never_connected') return json({ error: 'This computer has not paired with an agent yet. Use the initial Agent Setup package and registration code instead.' }, 409);
+      const packageBody = generatePowerShellAgent(url.origin, '', String(device.id));
+      device.agentUpdateStatus = 'bootstrap_downloaded';
+      device.agentUpdateTargetVersion = POWERSHELL_AGENT_VERSION;
+      device.agentUpdateRequestedAt = now();
+      device.agentUpdateFailureReason = undefined;
+      auditAgentUpdate(state, user, device, 'AGENT_BOOTSTRAP_PACKAGE_DOWNLOADED', `Downloaded a device-bound PowerShell update package for ${device.deviceName}; execution and telemetry verification are still required.`);
+      await save(env, state);
+      return new Response(packageBody, { headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="pc-monitoring-agent-update.ps1"', 'Cache-Control': 'no-store' } });
+    }
+    const agentUpdateMatch = path.match(/^\/api\/devices\/([^/]+)\/agent-update$/);
+    if (agentUpdateMatch && request.method === 'POST') {
+      if (!['super_admin', 'it_admin'].includes(String(user.role))) return json({ error: 'Administrator permission is required to request an agent update.' }, 403);
+      const device = (state.devices as Json[]).find(item => item.id === agentUpdateMatch[1]);
+      if (!device) return json({ error: 'Device not found.' }, 404);
+      if (device.connectionState === 'never_connected') return json({ error: 'This computer has not paired with an agent. Install the initial agent before requesting an update.' }, 409);
+      const updateCurrent = String(device.agentVersion || '') === POWERSHELL_AGENT_VERSION
+        && POWERSHELL_AGENT_CAPABILITIES.every(capability => hasAgentCapability(device, capability));
+      if (updateCurrent) return json({ success: true, alreadyCurrent: true, message: `This device already reports ${POWERSHELL_AGENT_VERSION} with the current update capability.`, version: POWERSHELL_AGENT_VERSION });
+      if (device.connectionState !== 'connected') return json({ error: 'The agent is offline, so it cannot receive an automatic update. Download the Windows update package and run it on the target computer after it reconnects.', manualUpdateRequired: true }, 409);
+      if (!hasAgentCapability(device, 'agent_self_update')) {
+        return json({ error: 'This connected agent does not support self-update. Download the one-time Windows update package, run it on the target computer, and wait for the next telemetry upload.', manualUpdateRequired: true, requiredVersion: POWERSHELL_AGENT_VERSION }, 409);
+      }
+      const commands = (state.deviceCommands as Json[] | undefined) || [];
+      const existing = commands.find(command => command.deviceId === device.id && command.type === 'agent_update' && ['queued', 'dispatched', 'awaiting_verification'].includes(String(command.status)) && Number(command.expiresAt || 0) > Date.now());
+      if (existing) return json({ success: true, alreadyQueued: true, command: existing, message: 'An agent update is already awaiting this device.' }, 202);
+      const command: Json = {
+        id: id('agent-update'), type: 'agent_update', deviceId: device.id, deviceName: device.deviceName,
+        targetVersion: POWERSHELL_AGENT_VERSION, requiredCapabilities: POWERSHELL_AGENT_CAPABILITIES,
+        requestedBy: user.id, requestedByName: user.fullName, requestedAt: now(), expiresAt: Date.now() + 30 * 60 * 1000, status: 'queued'
+      };
+      commands.unshift(command); state.deviceCommands = commands.slice(0, 100);
+      device.agentUpdateStatus = 'queued'; device.agentUpdateCommandId = command.id; device.agentUpdateTargetVersion = POWERSHELL_AGENT_VERSION; device.agentUpdateRequestedAt = command.requestedAt; device.agentUpdateFailureReason = undefined;
+      (state.notifications as Json[]).unshift({ id: id('notif'), title: `Agent update queued: ${device.deviceName}`, message: `The connected monitoring agent will retrieve the ${POWERSHELL_AGENT_VERSION} package during its next command cycle. Verification requires a new telemetry upload.`, type: 'info', deviceId: device.id, deviceName: device.deviceName, isRead: false, createdAt: now() });
+      auditAgentUpdate(state, user, device, 'AGENT_UPDATE_QUEUED', `Queued ${POWERSHELL_AGENT_VERSION} for ${device.deviceName}; dashboard verification is pending authenticated telemetry.`);
+      await save(env, state);
+      return json({ success: true, command, message: 'Agent update queued. The agent will download the package during its next command cycle; the dashboard will verify it only after a new telemetry upload.' }, 202);
     }
     const historyMatch = path.match(/^\/api\/devices\/([^/]+)\/telemetry\/history$/);
     if (historyMatch && request.method === 'GET') return json(((state.telemetryHistory as Record<string, Json[]>)[historyMatch[1]] || []));
@@ -720,7 +849,7 @@ export default {
       if (!body.deviceName || !body.assetId) return json({ error: 'Device name and Asset ID are required.' }, 400);
       const devices = state.devices as Json[];
       if (devices.some(device => String(device.assetId).toLowerCase() === String(body.assetId).toLowerCase())) return json({ error: 'Asset ID is already registered.' }, 409);
-      const device: Json = { ...body, id: id('dev'), registrationCode: `REG-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, registrationExpiresAt: Date.now() + 24 * 60 * 60 * 1000, deviceToken: `devtok_${crypto.randomUUID().replaceAll('-', '')}`, deviceType: body.deviceType || 'Desktop', assignedUser: body.assignedUser || 'Unassigned', status: 'Waiting for Agent Connection', connectionState: 'never_connected', registeredAt: now() };
+      const device: Json = { ...body, id: id('dev'), registrationCode: `REG-${crypto.randomUUID().replaceAll('-', '').toUpperCase()}`, registrationExpiresAt: Date.now() + 24 * 60 * 60 * 1000, deviceToken: `devtok_${crypto.randomUUID().replaceAll('-', '')}`, deviceType: body.deviceType || 'Desktop', assignedUser: body.assignedUser || 'Unassigned', status: 'Waiting for Agent Connection', connectionState: 'never_connected', registeredAt: now() };
       devices.unshift(device); (state.notifications as Json[]).unshift({ id: id('notif'), title: `Device Added: ${device.deviceName}`, message: 'Install the monitoring agent to start telemetry.', type: 'info', deviceId: device.id, deviceName: device.deviceName, isRead: false, createdAt: now() });
       await save(env, state); return json(publicDevice(state, device, user.role), 201);
     }

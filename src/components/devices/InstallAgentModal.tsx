@@ -1,303 +1,161 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Check, ClipboardCopy, Code2, Download, Laptop, Monitor, Radio, Terminal } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { useMonitoring } from '../../context/MonitoringContext';
-import { Device } from '../../types/index';
-import { 
-  Download, 
-  Terminal, 
-  Copy, 
-  Check, 
-  Monitor, 
-  CheckCircle2, 
-  Radio, 
-  Laptop, 
-  Code2, 
-  ExternalLink 
-} from 'lucide-react';
 import { StatusBadge } from '../common/Badge';
+import { useMonitoring } from '../../context/MonitoringContext';
+
+type AgentType = 'powershell' | 'python' | 'node';
 
 export const InstallAgentModal: React.FC = () => {
-  const { 
-    isInstallModalOpen, 
-    setIsInstallModalOpen, 
-    installTargetDevice, 
+  const {
+    isInstallModalOpen,
+    setIsInstallModalOpen,
+    installTargetDevice,
+    setInstallTargetDevice,
     devices,
-    setInstallTargetDevice 
+    setIsAgentUpdateModalOpen,
+    setAgentUpdateTargetDevice
   } = useMonitoring();
-
-  const [selectedTab, setSelectedTab] = useState<'powershell' | 'python' | 'node'>('powershell');
+  const [selectedTab, setSelectedTab] = useState<AgentType>('powershell');
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
-
   const [copiedScript, setCopiedScript] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const selectedDevice = installTargetDevice || devices[0] || null;
-  const registrationCode = selectedDevice?.registrationCode || 'REG-XXXX-XXXX';
-  const serverUrl = window.location.origin;
+  // Installation is only for an asset that has never paired. A connected,
+  // disconnected, or offline agent must use the separate update workflow.
+  const unpairedDevices = useMemo(
+    () => devices.filter(device => device.connectionState === 'never_connected' && Boolean(device.registrationCode)),
+    [devices]
+  );
+  const currentInstallTarget = installTargetDevice
+    ? devices.find(device => device.id === installTargetDevice.id) || installTargetDevice
+    : null;
+  const selectedDevice = unpairedDevices.find(device => device.id === currentInstallTarget?.id) || unpairedDevices[0] || null;
+  const pairedTarget = currentInstallTarget && currentInstallTarget.connectionState !== 'never_connected' ? currentInstallTarget : null;
+  const registrationCode = selectedDevice?.registrationCode || null;
 
-  const powershellRunCommand = `powershell -ExecutionPolicy Bypass -File .\\pc-monitoring-agent.ps1 -InstallAsStartupTask`;
-  const pythonRunCommand = `python agent.py`;
-  const nodeRunCommand = `node agent.mjs`;
+  const runCommand = selectedTab === 'powershell'
+    ? 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\pc-monitoring-agent.ps1 -InstallAsStartupTask'
+    : selectedTab === 'python'
+      ? 'python agent.py'
+      : 'node agent.mjs';
 
-  const getRunCommand = () => {
-    switch (selectedTab) {
-      case 'powershell': return powershellRunCommand;
-      case 'python': return pythonRunCommand;
-      case 'node': return nodeRunCommand;
-    }
-  };
-
-  const copyToClipboard = (text: string, setCopied: (v: boolean) => void) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDownload = (type: 'powershell' | 'python' | 'node') => {
-    window.open(`/api/agent/download/${type}?code=${registrationCode}`, '_blank');
-  };
-
-  const handleCopyFullScript = async (type: 'powershell' | 'python' | 'node') => {
+  const copyToClipboard = async (value: string, setCopied: (value: boolean) => void) => {
     try {
-      const res = await fetch(`/api/agent/download/${type}?code=${registrationCode}`);
-      const text = await res.text();
-      await navigator.clipboard.writeText(text);
-      setCopiedScript(true);
-      setTimeout(() => setCopiedScript(false), 2000);
-    } catch (e) {
-      console.error('Failed to copy script content', e);
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('Clipboard access was blocked. Select and copy the value manually.');
     }
   };
 
-  const isConnected = selectedDevice && selectedDevice.status !== 'Waiting for Agent Connection';
+  const agentUrl = (type: AgentType) => registrationCode
+    ? `/api/agent/download/${type}?code=${encodeURIComponent(registrationCode)}`
+    : null;
+
+  const downloadAgent = (type: AgentType) => {
+    const url = agentUrl(type);
+    if (!url) {
+      setError('Choose an unpaired computer with an active registration code before downloading an agent.');
+      return;
+    }
+    setError(null);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const copyScript = async () => {
+    const url = agentUrl(selectedTab);
+    if (!url) {
+      setError('Choose an unpaired computer with an active registration code before copying an agent script.');
+      return;
+    }
+    setError(null);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'The agent script could not be generated.');
+      }
+      await navigator.clipboard.writeText(await response.text());
+      setCopiedScript(true);
+      window.setTimeout(() => setCopiedScript(false), 2000);
+    } catch (copyError) {
+      setError(copyError instanceof Error ? copyError.message : 'The agent script could not be copied.');
+    }
+  };
+
+  const openUpdateWorkflow = () => {
+    if (!pairedTarget) return;
+    setAgentUpdateTargetDevice(pairedTarget);
+    setIsInstallModalOpen(false);
+    setIsAgentUpdateModalOpen(true);
+  };
 
   return (
     <Modal
       isOpen={isInstallModalOpen}
       onClose={() => setIsInstallModalOpen(false)}
-      title="PC & Laptop Monitoring Agent Installation"
-      subtitle="Deploy the lightweight hardware monitoring agent on physical computers."
+      title="Install Monitoring Agent"
+      subtitle="Pair a newly registered physical computer. Existing agents use the separate Update Agent workflow."
       maxWidth="4xl"
     >
-      <div className="space-y-5">
-        
-        {/* Device Selector & Live Status */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700">
-              <Monitor className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Target Computer</p>
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedDevice?.id || ''}
-                  onChange={e => {
-                    const dev = devices.find(d => d.id === e.target.value);
-                    setInstallTargetDevice(dev || null);
-                  }}
-                  className="text-sm font-bold text-slate-900 bg-transparent border-b border-slate-300 focus:outline-none focus:border-indigo-600 pb-0.5 cursor-pointer"
-                >
-                  {devices.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.deviceName} ({d.assetId}) - {d.status}
-                    </option>
-                  ))}
-                </select>
-                {selectedDevice && <StatusBadge status={selectedDevice.status} size="sm" />}
-              </div>
-            </div>
+      {!selectedDevice ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+            <Monitor className="mx-auto mb-2 h-7 w-7 text-slate-400" />
+            {pairedTarget ? (
+              <>
+                <p className="text-sm font-bold text-slate-800">{pairedTarget.deviceName} is already paired</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">A registration code is not reused after pairing. Use the agent update workflow instead of downloading another install package.</p>
+                <button type="button" onClick={openUpdateWorkflow} className="mt-4 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-700">Open Update Agent</button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-bold text-slate-800">No unpaired computers are waiting for installation</p>
+                <p className="mt-1 text-xs text-slate-600">Register a computer first. A device-specific pairing code will then be available here.</p>
+              </>
+            )}
           </div>
-
-          {/* Registration Code Display */}
-          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
-            <div>
-              <p className="text-[10px] text-slate-400 font-semibold uppercase">Registration Code</p>
-              <p className="font-mono text-sm font-bold text-indigo-600">{registrationCode}</p>
-            </div>
-            <button
-              onClick={() => copyToClipboard(registrationCode, setCopiedCode)}
-              className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
-              title="Copy code"
-            >
-              {copiedCode ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-            </button>
-          </div>
+          <div className="flex justify-end"><button type="button" onClick={() => setIsInstallModalOpen(false)} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800">Close</button></div>
         </div>
-
-        {/* Live Connection Watcher Status */}
-        <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
-          isConnected ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-sky-50 border-sky-200 text-sky-900'
-        }`}>
-          <div className="flex items-center gap-2.5">
-            <Radio className={`w-4 h-4 ${isConnected ? 'text-emerald-600 animate-pulse' : 'text-sky-600 animate-spin'}`} />
-            <div>
-              <p className="text-xs font-bold">
-                {isConnected 
-                  ? `Agent Connected & Telemetry Active (${selectedDevice.status})` 
-                  : 'Listening for incoming Agent telemetry...'
-                }
-              </p>
-              <p className="text-[11px] opacity-80">
-                {isConnected
-                  ? `Last heartbeat: ${selectedDevice.lastHeartbeatAt ? new Date(selectedDevice.lastHeartbeatAt).toLocaleTimeString() : 'Active'}. Hardware telemetry streaming.`
-                  : 'Run the command below on the target physical computer. The dashboard will automatically update in real time.'
-                }
-              </p>
+      ) : (
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-2.5 text-indigo-700"><Monitor className="h-5 w-5" /></div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Computer awaiting first agent</p>
+                <div className="flex flex-wrap items-center gap-2"><select value={selectedDevice.id} onChange={event => setInstallTargetDevice(unpairedDevices.find(device => device.id === event.target.value) || null)} className="border-b border-slate-300 bg-transparent pb-0.5 text-sm font-bold text-slate-900 focus:border-indigo-600 focus:outline-none">{unpairedDevices.map(device => <option key={device.id} value={device.id}>{device.deviceName} ({device.assetId})</option>)}</select><StatusBadge status={selectedDevice.status} size="sm" /></div>
+                <p className="mt-1 text-[11px] text-slate-500">No heartbeat has been received. The dashboard will show a connection only after this physical computer pairs and sends telemetry.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xs">
+              <div><p className="text-[10px] font-bold uppercase text-slate-400">Pairing code</p><p className="font-mono text-sm font-bold text-indigo-700">{registrationCode}</p></div>
+              <button type="button" onClick={() => void copyToClipboard(registrationCode, setCopiedCode)} className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="Copy pairing code">{copiedCode ? <Check className="h-4 w-4 text-emerald-600" /> : <ClipboardCopy className="h-4 w-4" />}</button>
             </div>
           </div>
-          {isConnected && (
-            <span className="px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              ONLINE
-            </span>
-          )}
-        </div>
 
-        {/* Agent Script Tabs */}
-        <div>
-          <div className="flex items-center gap-2 border-b border-slate-200">
-            <button
-              onClick={() => setSelectedTab('powershell')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
-                selectedTab === 'powershell' 
-                  ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' 
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Terminal className="w-4 h-4" />
-              <span>Windows PowerShell (Recommended)</span>
-            </button>
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900"><div className="flex gap-2"><Radio className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>Waiting for a real heartbeat.</strong> Download and run the selected agent on <strong>{selectedDevice.deviceName}</strong>. It remains unconnected until the backend receives an authenticated registration and telemetry.</div></div></div>
 
-            <button
-              onClick={() => setSelectedTab('python')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
-                selectedTab === 'python' 
-                  ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' 
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Code2 className="w-4 h-4" />
-              <span>Python 3 (Cross-Platform)</span>
-            </button>
-
-            <button
-              onClick={() => setSelectedTab('node')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
-                selectedTab === 'node' 
-                  ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' 
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Laptop className="w-4 h-4" />
-              <span>Node.js</span>
-            </button>
-          </div>
-
-          <div className="p-4 bg-slate-900 rounded-b-xl text-slate-200 space-y-4 font-mono text-xs">
-            {/* Direct Download & Copy Script File */}
-            <div>
-              <div className="flex items-center justify-between text-slate-400 text-[11px] mb-2 font-sans">
-                <span className="font-semibold text-slate-300">Step 1: Download or Copy Agent Script</span>
-                <span className="text-emerald-400">Pre-configured with Server & Code</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedTab === 'powershell' && (
-                  <button
-                    id="download-ps-agent-btn"
-                    onClick={() => handleDownload('powershell')}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-sans text-xs font-bold transition-colors shadow-xs"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download pc-monitoring-agent.ps1
-                  </button>
-                )}
-
-                {selectedTab === 'python' && (
-                  <button
-                    onClick={() => handleDownload('python')}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-sans text-xs font-bold transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download pc-monitoring-agent.py
-                  </button>
-                )}
-
-                {selectedTab === 'node' && (
-                  <button
-                    onClick={() => handleDownload('node')}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-sans text-xs font-bold transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download pc-monitoring-agent.mjs
-                  </button>
-                )}
-
-                <button
-                  onClick={() => handleCopyFullScript(selectedTab)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-sans text-xs font-semibold transition-colors border border-slate-700"
-                  title="Copy the full script code to clipboard"
-                >
-                  {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copiedScript ? 'Copied Full Script!' : 'Copy Script Code'}
-                </button>
-              </div>
+          <div>
+            <div className="flex flex-wrap gap-1 border-b border-slate-200">
+              <button type="button" onClick={() => setSelectedTab('powershell')} className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold ${selectedTab === 'powershell' ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Terminal className="h-4 w-4" />Windows PowerShell (recommended)</button>
+              <button type="button" onClick={() => setSelectedTab('python')} className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold ${selectedTab === 'python' ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Code2 className="h-4 w-4" />Python</button>
+              <button type="button" onClick={() => setSelectedTab('node')} className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold ${selectedTab === 'node' ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}><Laptop className="h-4 w-4" />Node.js</button>
             </div>
-
-            {/* Step 2: Run Command in PowerShell/Terminal */}
-            <div>
-              <div className="flex items-center justify-between text-slate-400 text-[11px] mb-1 font-sans">
-                <span className="font-semibold text-slate-300">Step 2: Run in {selectedTab === 'powershell' ? 'PowerShell (Run as Administrator)' : 'Terminal'}</span>
-                <span>In the folder where the script is saved</span>
-              </div>
-              <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex items-center justify-between gap-3">
-                <code className="text-emerald-400 break-all select-all font-mono">
-                  {getRunCommand()}
-                </code>
-                <button
-                  id="copy-agent-cmd-btn"
-                  onClick={() => copyToClipboard(getRunCommand(), setCopiedCommand)}
-                  className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white shrink-0 transition-colors"
-                  title="Copy command"
-                >
-                  {copiedCommand ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Feature checklist */}
-            <div className="pt-3 border-t border-slate-800/80 font-sans text-[11px] text-slate-400 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Captures CPU % and multi-core specs</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Physical RAM used & available</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Logical disk partitions & SMART health</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Top resource-consuming processes</span>
-              </div>
+            <div className="space-y-4 rounded-b-xl bg-slate-900 p-4 font-mono text-xs text-slate-200">
+              <div className="flex flex-wrap items-center justify-between gap-2 font-sans"><div><p className="text-[11px] font-bold text-slate-200">1. Download the device-specific agent</p><p className="mt-0.5 text-[11px] text-slate-400">The pairing code is embedded only for this unpaired asset.</p></div><div className="flex flex-wrap gap-2"><button id="download-ps-agent-btn" type="button" onClick={() => downloadAgent(selectedTab)} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-500"><Download className="h-3.5 w-3.5" />Download {selectedTab === 'powershell' ? '.ps1' : selectedTab === 'python' ? '.py' : '.mjs'}</button><button type="button" onClick={() => void copyScript()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700">{copiedScript ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <ClipboardCopy className="h-3.5 w-3.5" />}{copiedScript ? 'Script copied' : 'Copy script'}</button></div></div>
+              <div><div className="mb-1 flex justify-between font-sans text-[11px] text-slate-400"><span className="font-semibold text-slate-300">2. Run on the target computer</span><span>Use an administrator PowerShell session for startup installation</span></div><div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 p-3"><code className="min-w-0 flex-1 break-all text-emerald-400">{runCommand}</code><button id="copy-agent-cmd-btn" type="button" onClick={() => void copyToClipboard(runCommand, setCopiedCommand)} className="rounded bg-slate-800 p-1.5 text-slate-200 hover:bg-slate-700" title="Copy command">{copiedCommand ? <Check className="h-4 w-4 text-emerald-400" /> : <ClipboardCopy className="h-4 w-4" />}</button></div></div>
+              {selectedTab !== 'powershell' && <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 font-sans text-[11px] text-amber-100">Python and Node installers provide their supported telemetry only. They do not advertise the Windows Wi-Fi diagnostic command or Windows agent update capabilities.</p>}
             </div>
           </div>
-        </div>
 
-        {/* Modal Close Button */}
-        <div className="flex items-center justify-end pt-2 border-t border-slate-100">
-          <button
-            onClick={() => setIsInstallModalOpen(false)}
-            className="px-4 py-2 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors"
-          >
-            Close Guide
-          </button>
+          {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">{error}</div>}
+          <div className="flex justify-end border-t border-slate-100 pt-2"><button type="button" onClick={() => setIsInstallModalOpen(false)} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800">Close Guide</button></div>
         </div>
-
-      </div>
+      )}
     </Modal>
   );
 };

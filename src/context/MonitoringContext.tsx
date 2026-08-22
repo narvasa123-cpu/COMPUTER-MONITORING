@@ -28,6 +28,10 @@ interface MonitoringContextType {
   setIsInstallModalOpen: (open: boolean) => void;
   installTargetDevice: Device | null;
   setInstallTargetDevice: (device: Device | null) => void;
+  isAgentUpdateModalOpen: boolean;
+  setIsAgentUpdateModalOpen: (open: boolean) => void;
+  agentUpdateTargetDevice: Device | null;
+  setAgentUpdateTargetDevice: (device: Device | null) => void;
   isRulesModalOpen: boolean;
   setIsRulesModalOpen: (open: boolean) => void;
 }
@@ -50,6 +54,8 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
   const [installTargetDevice, setInstallTargetDevice] = useState<Device | null>(null);
+  const [isAgentUpdateModalOpen, setIsAgentUpdateModalOpen] = useState<boolean>(false);
+  const [agentUpdateTargetDevice, setAgentUpdateTargetDevice] = useState<Device | null>(null);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState<boolean>(false);
 
   const refreshData = useCallback(async () => {
@@ -141,6 +147,10 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsInstallModalOpen,
       installTargetDevice,
       setInstallTargetDevice,
+      isAgentUpdateModalOpen,
+      setIsAgentUpdateModalOpen,
+      agentUpdateTargetDevice,
+      setAgentUpdateTargetDevice,
       isRulesModalOpen,
       setIsRulesModalOpen
     }}>

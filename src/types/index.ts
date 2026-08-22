@@ -247,6 +247,21 @@ export interface Device {
   lastHeartbeatAt?: string;
   lastOnlineAt?: string;
   offlineSince?: string;
+  /** Last version actually reported by the monitoring agent. Never infer this from an asset record. */
+  agentVersion?: string;
+  /** Capabilities actually advertised by the agent during registration or telemetry. */
+  agentCapabilities?: string[];
+  /**
+   * Lifecycle of an agent update request. `verified` is set only after a fresh
+   * agent heartbeat reports the expected version/capabilities.
+   */
+  agentUpdateStatus?: 'queued' | 'dispatched' | 'package_delivered' | 'bootstrap_downloaded' | 'manual_package_downloaded' | 'awaiting_verification' | 'verified' | 'failed';
+  agentUpdateTargetVersion?: string;
+  agentUpdateCommandId?: string;
+  agentUpdateRequestedAt?: string;
+  agentUpdateVerifiedAt?: string;
+  agentUpdatePackageDeliveredAt?: string;
+  agentUpdateFailureReason?: string;
   ipAddress?: string;
   macAddress?: string;
   specs?: HardwareSpecs;

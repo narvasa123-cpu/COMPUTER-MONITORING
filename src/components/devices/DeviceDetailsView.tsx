@@ -49,6 +49,8 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
     refreshData, 
     setIsInstallModalOpen, 
     setInstallTargetDevice,
+    setIsAgentUpdateModalOpen,
+    setAgentUpdateTargetDevice,
     setSelectedDeviceId
   } = useMonitoring();
   const { user } = useAuth();
@@ -111,6 +113,8 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
       if (!res.ok) throw new Error(result.error || 'The computer could not be deleted.');
       setInstallTargetDevice(null);
       setIsInstallModalOpen(false);
+      setAgentUpdateTargetDevice(null);
+      setIsAgentUpdateModalOpen(false);
       setSelectedDeviceId(null);
       await refreshData();
       onBack();
@@ -208,6 +212,13 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   const tel = device.latestTelemetry;
   const specs = device.specs;
   const canViewNetworkDiagnostics = user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician';
+  const canManageAgentUpdates = user?.role === 'super_admin' || user?.role === 'it_admin';
+  const isPairedWithAgent = device.connectionState !== 'never_connected';
+
+  const openAgentUpdate = () => {
+    setAgentUpdateTargetDevice(device);
+    setIsAgentUpdateModalOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -235,17 +246,29 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Connect / Agent Guide */}
-          <button
-            onClick={() => {
-              setInstallTargetDevice(device);
-              setIsInstallModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Agent Setup ({device.registrationCode})</span>
-          </button>
+          {/* Installation and update are deliberately separate: a paired asset
+              must never receive another registration-code installation flow. */}
+          {!isPairedWithAgent ? (
+            <button
+              onClick={() => {
+                setInstallTargetDevice(device);
+                setIsInstallModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Install Agent</span>
+            </button>
+          ) : canManageAgentUpdates ? (
+            <button
+              onClick={openAgentUpdate}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+              title="Update the already paired Windows monitoring agent"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Update Agent{device.agentVersion ? ` (${device.agentVersion})` : ''}</span>
+            </button>
+          ) : null}
 
           {(user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician') && (
             <button
@@ -361,7 +384,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
       </div>
 
       {/* Waiting for Agent Banner if not connected */}
-      {device.status === 'Waiting for Agent Connection' && (
+      {!isPairedWithAgent && (
         <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 text-sky-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h4 className="text-sm font-bold flex items-center gap-2">
@@ -732,6 +755,8 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
         <NetworkDiagnosticsPanel
           device={device}
           canRunDiagnostics={user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician'}
+          canUpdateAgent={canManageAgentUpdates}
+          onUpdateAgent={canManageAgentUpdates ? openAgentUpdate : undefined}
         />
       )}
 

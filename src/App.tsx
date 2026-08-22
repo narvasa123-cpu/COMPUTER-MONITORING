@@ -20,6 +20,7 @@ import { AuditLogsView } from './components/audit/AuditLogsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { AddDeviceModal } from './components/devices/AddDeviceModal';
 import { InstallAgentModal } from './components/devices/InstallAgentModal';
+import { AgentUpdateModal } from './components/devices/AgentUpdateModal';
 import { LoginView } from './components/auth/LoginView';
 import { Device, DiagnosticIssue } from './types/index';
 
@@ -120,6 +121,7 @@ function MainAppLayout() {
       {/* Global Modals */}
       <AddDeviceModal />
       <InstallAgentModal />
+      <AgentUpdateModal />
       <DiagnosticRulesModal />
 
       {/* Dynamic Ticket and Maintenance Modals */}
