@@ -1,124 +1,225 @@
-import React from 'react';
-import { 
-  LayoutDashboard, 
-  Monitor, 
-  Stethoscope, 
-  Wrench, 
-  History, 
-  MapPin, 
-  Building2, 
-  Users, 
-  FileText, 
-  ShieldCheck, 
-  Sliders,
+import React, { useEffect, useState } from 'react';
+import {
+  Activity,
+  Building2,
   Download,
-  Flame
+  FileText,
+  History,
+  LayoutDashboard,
+  MapPin,
+  Monitor,
+  ShieldCheck,
+  SlidersHorizontal,
+  Stethoscope,
+  Users,
+  Wrench,
+  X,
 } from 'lucide-react';
 import { useMonitoring } from '../../context/MonitoringContext';
 
+type NavigationItem = {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  badge?: number | null;
+  badgeTone?: 'critical' | 'warning' | 'indigo' | 'neutral';
+};
+
+const badgeToneClasses: Record<NonNullable<NavigationItem['badgeTone']>, string> = {
+  critical: 'bg-rose-500 text-white',
+  warning: 'bg-amber-400 text-amber-950',
+  indigo: 'bg-indigo-100 text-indigo-700',
+  neutral: 'bg-white/10 text-slate-200',
+};
+
 export const Sidebar: React.FC = () => {
-  const { 
-    activeTab, 
-    setActiveTab, 
+  const {
+    activeTab,
+    setActiveTab,
     setSelectedDeviceId,
     summary,
-    unreadNotificationCount,
     setIsInstallModalOpen,
-    setInstallTargetDevice
+    setInstallTargetDevice,
   } = useMonitoring();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
-    { 
-      id: 'devices', 
-      label: 'Computers', 
-      icon: Monitor, 
-      badge: summary?.totalDevices || 0 
+  useEffect(() => {
+    const toggleSidebar = () => setIsMobileOpen((open) => !open);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMobileOpen(false);
+    };
+
+    window.addEventListener('monitoring:toggle-sidebar', toggleSidebar);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('monitoring:toggle-sidebar', toggleSidebar);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    if (isMobileOpen) document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isMobileOpen]);
+
+  const groups: Array<{ label: string; items: NavigationItem[] }> = [
+    {
+      label: 'Operations',
+      items: [
+        { id: 'dashboard', label: 'Command center', icon: LayoutDashboard },
+        { id: 'devices', label: 'Computers', icon: Monitor, badge: summary?.totalDevices ?? 0, badgeTone: 'neutral' },
+        {
+          id: 'diagnostics',
+          label: 'Diagnostics & findings',
+          icon: Stethoscope,
+          badge: summary?.activeIssues ?? 0,
+          badgeTone: (summary?.criticalIssues ?? 0) > 0 ? 'critical' : 'warning',
+        },
+        { id: 'tickets', label: 'Repair tickets', icon: Wrench, badge: summary?.openTickets ?? 0, badgeTone: 'indigo' },
+        { id: 'maintenance', label: 'Maintenance history', icon: History },
+      ],
     },
-    { 
-      id: 'diagnostics', 
-      label: 'Diagnostics & Findings', 
-      icon: Stethoscope, 
-      badge: summary?.activeIssues || 0,
-      badgeColor: (summary?.criticalIssues || 0) > 0 ? 'bg-rose-500 text-white' : 'bg-amber-100 text-amber-800'
+    {
+      label: 'Organization',
+      items: [
+        { id: 'locations', label: 'Laboratories & rooms', icon: MapPin },
+        { id: 'departments', label: 'Departments', icon: Building2 },
+        { id: 'users', label: 'User accounts', icon: Users },
+      ],
     },
-    { 
-      id: 'tickets', 
-      label: 'Repair Tickets', 
-      icon: Wrench, 
-      badge: summary?.openTickets || 0,
-      badgeColor: 'bg-indigo-100 text-indigo-700'
+    {
+      label: 'Control & reporting',
+      items: [
+        { id: 'reports', label: 'Reports & export', icon: FileText },
+        { id: 'audit', label: 'Audit trail', icon: ShieldCheck },
+        { id: 'settings', label: 'Rules & settings', icon: SlidersHorizontal },
+      ],
     },
-    { id: 'maintenance', label: 'Maintenance History', icon: History, badge: null },
-    { id: 'locations', label: 'Laboratories & Rooms', icon: MapPin, badge: null },
-    { id: 'departments', label: 'Departments', icon: Building2, badge: null },
-    { id: 'users', label: 'User Accounts', icon: Users, badge: null },
-    { id: 'reports', label: 'Reports & Export', icon: FileText, badge: null },
-    { id: 'audit', label: 'Audit Trail', icon: ShieldCheck, badge: null },
-    { id: 'settings', label: 'Rules & Settings', icon: Sliders, badge: null }
   ];
 
+  const navigate = (tab: string) => {
+    setActiveTab(tab);
+    if (tab !== 'devices') setSelectedDeviceId(null);
+    setIsMobileOpen(false);
+  };
+
   return (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 min-h-[calc(100vh-61px)]">
-      {/* Navigation Links */}
-      <div className="p-3 space-y-1 flex-1 overflow-y-auto">
-        <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Operations & Inventory
+    <aside className={`app-sidebar ${isMobileOpen ? 'app-sidebar--open' : ''}`} aria-label="Application navigation">
+      <button
+        type="button"
+        className="app-sidebar-scrim"
+        onClick={() => setIsMobileOpen(false)}
+        aria-label="Close navigation"
+        tabIndex={isMobileOpen ? 0 : -1}
+      />
+      <div className="app-sidebar-panel flex min-h-0 w-full flex-col bg-slate-950 text-slate-200">
+        <div className="app-sidebar-mobile-title flex items-center justify-between border-b border-white/10 px-4 py-3 lg:hidden">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-indigo-300">Operations console</p>
+            <p className="mt-0.5 text-sm font-bold text-white">Navigation</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileOpen(false)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            aria-label="Close navigation"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
 
-        {navItems.map(item => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              id={`nav-${item.id}-btn`}
-              onClick={() => {
-                setActiveTab(item.id);
-                if (item.id !== 'devices') {
-                  setSelectedDeviceId(null);
-                }
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all ${
-                isActive 
-                  ? 'bg-indigo-600 text-white shadow-sm' 
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                <span>{item.label}</span>
-              </div>
-              {item.badge !== null && item.badge > 0 && (
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${item.badgeColor || 'bg-slate-700 text-slate-200'}`}>
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Primary navigation">
+          {groups.map((group, groupIndex) => (
+            <section key={group.label} className={groupIndex === 0 ? '' : 'mt-6'} aria-label={group.label}>
+              <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">{group.label}</p>
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  const hasBadge = (item.badge ?? 0) > 0;
 
-      {/* Agent Download Quick Banner */}
-      <div className="p-3 border-t border-slate-800 bg-slate-950/40">
-        <div className="bg-slate-800/80 rounded-lg p-3 border border-slate-700/50 text-xs">
-          <div className="flex items-center gap-2 text-indigo-400 font-bold mb-1">
-            <Download className="w-4 h-4" />
-            <span>PC Monitoring Agent</span>
+                  return (
+                    <button
+                      key={item.id}
+                      id={`nav-${item.id}-btn`}
+                      type="button"
+                      onClick={() => navigate(item.id)}
+                      className={`app-sidebar-link group relative flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-300 ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-[0_8px_18px_rgba(79,70,229,0.28)]'
+                          : 'text-slate-300 hover:bg-white/[0.07] hover:text-white'
+                      }`}
+                      aria-current={isActive ? 'page' : undefined}
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${
+                          isActive ? 'bg-white/15 text-white' : 'bg-white/[0.04] text-slate-400 group-hover:bg-white/[0.09] group-hover:text-slate-200'
+                        }`}>
+                          <Icon className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {hasBadge && (
+                        <span className={`ml-2 inline-flex min-w-5 items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${
+                          isActive ? 'bg-white/15 text-white' : badgeToneClasses[item.badgeTone ?? 'neutral']
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </nav>
+
+        <div className="border-t border-white/10 bg-slate-950/80 p-3">
+          {summary && (
+            <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] p-2.5">
+              <div>
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
+                  <Activity className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  Environment health
+                </div>
+                <p className="mt-1 text-base font-extrabold text-white">
+                  {summary.overallHealthScore ?? '—'}
+                  {summary.overallHealthScore !== null && summary.overallHealthScore !== undefined && <span className="ml-0.5 text-[10px] font-bold text-slate-400">/100</span>}
+                </p>
+              </div>
+              <div className="border-l border-white/[0.08] pl-2.5">
+                <p className="text-[10px] font-semibold text-slate-400">Live agents</p>
+                <p className="mt-1 text-base font-extrabold text-white">{summary.onlineDevices}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-indigo-400/20 bg-gradient-to-br from-indigo-500/15 to-slate-900 px-3 py-3">
+            <div className="flex items-center gap-2 text-indigo-200">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-400/15">
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+              <span className="text-xs font-bold">Monitoring agent</span>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+              Install the agent on an actual device to receive verified heartbeats and telemetry.
+            </p>
+            <button
+              id="sidebar-install-guide-btn"
+              type="button"
+              onClick={() => {
+                setInstallTargetDevice(null);
+                setIsInstallModalOpen(true);
+                setIsMobileOpen(false);
+              }}
+              className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-indigo-500 px-2.5 py-2 text-[11px] font-bold text-white shadow-[0_6px_14px_rgba(79,70,229,0.22)] transition hover:bg-indigo-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+            >
+              Agent setup
+            </button>
           </div>
-          <p className="text-[11px] text-slate-400 leading-relaxed mb-2.5">
-            Install on Windows/Linux PCs to collect actual hardware telemetry & heartbeats.
-          </p>
-          <button
-            id="sidebar-install-guide-btn"
-            onClick={() => {
-              setInstallTargetDevice(null);
-              setIsInstallModalOpen(true);
-            }}
-            className="w-full py-1.5 px-2 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded text-[11px] font-bold text-center transition-colors"
-          >
-            Get Agent Scripts
-          </button>
         </div>
       </div>
     </aside>

@@ -1,30 +1,38 @@
 import React, { useState } from 'react';
-import { 
-  Monitor, 
-  Bell, 
-  RefreshCw, 
-  Plus, 
+import {
+  Bell,
   ChevronDown,
-  LogOut
+  Clock3,
+  LogOut,
+  Menu,
+  Monitor,
+  Plus,
+  RefreshCw,
+  Radio,
 } from 'lucide-react';
 import { useMonitoring } from '../../context/MonitoringContext';
 import { useAuth } from '../../context/AuthContext';
 
+const formatRefreshTime = (date: Date) => new Intl.DateTimeFormat(undefined, {
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+}).format(date);
+
 export const Header: React.FC = () => {
-  const { 
-    notifications, 
-    unreadNotificationCount, 
-    isPolling, 
-    setIsPolling, 
-    lastRefreshed, 
-    refreshData, 
+  const {
+    notifications,
+    unreadNotificationCount,
+    isPolling,
+    setIsPolling,
+    lastRefreshed,
+    refreshData,
     markAllNotificationsRead,
     markNotificationRead,
     setIsAddModalOpen,
     setActiveTab,
-    setSelectedDeviceId
+    setSelectedDeviceId,
   } = useMonitoring();
-
   const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -32,141 +40,166 @@ export const Header: React.FC = () => {
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
-    await refreshData();
-    setTimeout(() => setRefreshing(false), 400);
+    try {
+      await refreshData();
+    } finally {
+      window.setTimeout(() => setRefreshing(false), 350);
+    }
+  };
+
+  const toggleNavigation = () => {
+    window.dispatchEvent(new CustomEvent('monitoring:toggle-sidebar'));
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
-      <div className="px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
-        
-        {/* Left: Branding & Status */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-900 text-white shadow-sm">
-            <Monitor className="w-5 h-5 text-indigo-400" />
+    <header className="app-header sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 shadow-[0_1px_0_rgba(15,23,42,0.03)] backdrop-blur">
+      <div className="app-header-inner flex min-h-[72px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleNavigation}
+            className="app-mobile-nav-trigger inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 lg:hidden"
+            aria-label="Open navigation"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-950 to-slate-800 text-white shadow-[0_8px_18px_rgba(15,23,42,0.18)] ring-1 ring-slate-900/10">
+            <Monitor className="h-5 w-5 text-indigo-200" aria-hidden="true" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-slate-900 leading-tight">
-                PC & Laptop Monitoring & Diagnostics
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <h1 className="truncate text-[15px] font-bold tracking-[-0.02em] text-slate-950 sm:text-base">
+                PC &amp; Laptop Monitoring
               </h1>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live Telemetry
+              <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${
+                isPolling
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-200 bg-slate-50 text-slate-600'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${isPolling ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                {isPolling ? 'Sync active' : 'Sync paused'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 hidden sm:block">
-              Hardware Telemetry • Automated Diagnostics • Incident Tickets • Maintenance
+            <p className="mt-0.5 hidden text-xs text-slate-500 sm:block">
+              Health intelligence <span className="mx-1 text-slate-300">•</span> Diagnostics <span className="mx-1 text-slate-300">•</span> Incident response <span className="mx-1 text-slate-300">•</span> Maintenance
             </p>
           </div>
         </div>
 
-        {/* Right: Actions, Notifications, Role Switcher */}
-        <div className="flex items-center gap-2.5">
-          
-          {/* Real-time Polling & Refresh */}
-          <div className="hidden md:flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-600">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <div className="hidden items-center rounded-xl border border-slate-200 bg-slate-50/80 p-1 md:flex">
             <button
+              type="button"
               onClick={() => setIsPolling(!isPolling)}
-              title={isPolling ? 'Live auto-sync active (every 3.5s)' : 'Live sync paused'}
-              className={`w-2 h-2 rounded-full ${isPolling ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}
-            />
-            <span className="text-[11px] font-medium">
-              {isPolling ? 'Auto-Sync ON' : 'Paused'}
-            </span>
-            <span className="text-slate-300">|</span>
-            <button
-              onClick={handleManualRefresh}
-              className="hover:text-slate-900 transition-colors p-0.5"
-              title="Refresh now"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-semibold text-slate-600 transition hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              title={isPolling ? 'Pause dashboard auto-sync' : 'Resume dashboard auto-sync'}
+              aria-pressed={isPolling}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <Radio className={`h-3.5 w-3.5 ${isPolling ? 'text-emerald-600' : 'text-slate-400'}`} aria-hidden="true" />
+              <span>{isPolling ? 'Auto-sync' : 'Paused'}</span>
+            </button>
+            <span className="h-4 w-px bg-slate-200" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-semibold text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              title={`Refresh data now. Last successful refresh: ${formatRefreshTime(lastRefreshed)}`}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} aria-hidden="true" />
+              <span className="hidden lg:inline">{formatRefreshTime(lastRefreshed)}</span>
             </button>
           </div>
 
-          {/* Register New PC */}
           <button
             id="header-add-device-btn"
+            type="button"
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-xs"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white shadow-[0_6px_14px_rgba(79,70,229,0.24)] transition hover:bg-indigo-700 hover:shadow-[0_8px_18px_rgba(79,70,229,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 sm:px-3.5"
           >
-            <Plus className="w-4 h-4" />
-            <span>Add Computer</span>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Add computer</span>
+            <span className="sr-only sm:hidden">Add computer</span>
           </button>
 
-          {/* Notification Center */}
           <div className="relative">
             <button
               id="notifications-toggle-btn"
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+              type="button"
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                setShowRoleMenu(false);
+              }}
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`}
+              aria-expanded={showNotifications}
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
               {unreadNotificationCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center animate-pulse">
+                <span className="absolute right-1 top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full border-2 border-white bg-rose-600 px-0.5 text-[9px] font-extrabold leading-none text-white">
                   {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
                 </span>
               )}
             </button>
 
-            {/* Notification Dropdown */}
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-slate-900">Notifications & Alerts</span>
-                    {unreadNotificationCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">
-                        {unreadNotificationCount} unread
-                      </span>
-                    )}
+              <div className="app-header-popover absolute right-0 mt-2 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_56px_rgba(15,23,42,0.18)]" role="dialog" aria-label="Notifications">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-950">Notifications</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">System alerts and workflow activity</p>
                   </div>
                   {unreadNotificationCount > 0 && (
                     <button
+                      type="button"
                       onClick={markAllNotificationsRead}
-                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
+                      className="rounded-lg px-2 py-1 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
-                      Mark all as read
+                      Mark all read
                     </button>
                   )}
                 </div>
 
-                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                <div className="max-h-[min(22rem,calc(100vh-11rem))] divide-y divide-slate-100 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-slate-400">
-                      No notifications or active alerts.
+                    <div className="px-5 py-10 text-center">
+                      <Bell className="mx-auto h-5 w-5 text-slate-300" aria-hidden="true" />
+                      <p className="mt-2 text-xs font-semibold text-slate-600">No notifications yet</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">New alert, incident, and assignment activity will appear here.</p>
                     </div>
                   ) : (
-                    notifications.map(notif => (
-                      <div
-                        key={notif.id}
+                    notifications.map((notification) => (
+                      <button
+                        key={notification.id}
+                        type="button"
                         onClick={() => {
-                          markNotificationRead(notif.id);
-                          if (notif.deviceId) {
-                            setSelectedDeviceId(notif.deviceId);
+                          markNotificationRead(notification.id);
+                          if (notification.deviceId) {
+                            setSelectedDeviceId(notification.deviceId);
                             setActiveTab('devices');
                           }
                           setShowNotifications(false);
                         }}
-                        className={`p-3 hover:bg-slate-50 cursor-pointer transition-colors ${!notif.isRead ? 'bg-indigo-50/40' : ''}`}
+                        className={`flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
+                          !notification.isRead ? 'bg-indigo-50/45' : ''
+                        }`}
                       >
-                        <div className="flex items-start gap-2">
-                          <div className="mt-0.5">
-                            {notif.type === 'critical' && <span className="w-2 h-2 rounded-full bg-rose-500 block" />}
-                            {notif.type === 'warning' && <span className="w-2 h-2 rounded-full bg-amber-500 block" />}
-                            {notif.type === 'ticket' && <span className="w-2 h-2 rounded-full bg-purple-500 block" />}
-                            {notif.type === 'offline' && <span className="w-2 h-2 rounded-full bg-slate-500 block" />}
-                            {notif.type === 'info' && <span className="w-2 h-2 rounded-full bg-blue-500 block" />}
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-xs font-semibold text-slate-900">{notif.title}</p>
-                            <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-2">{notif.message}</p>
-                            <span className="text-[10px] text-slate-400 mt-1 block">
-                              {new Date(notif.createdAt).toLocaleTimeString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                          notification.type === 'critical' ? 'bg-rose-500' :
+                          notification.type === 'warning' ? 'bg-amber-500' :
+                          notification.type === 'ticket' ? 'bg-violet-500' :
+                          notification.type === 'offline' ? 'bg-slate-500' : 'bg-sky-500'
+                        }`} aria-hidden="true" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-semibold text-slate-900">{notification.title}</span>
+                          <span className="mt-0.5 block line-clamp-2 text-[11px] leading-relaxed text-slate-600">{notification.message}</span>
+                          <span className="mt-1.5 flex items-center gap-1 text-[10px] text-slate-400">
+                            <Clock3 className="h-3 w-3" aria-hidden="true" />
+                            {new Date(notification.createdAt).toLocaleString()}
+                          </span>
+                        </span>
+                      </button>
                     ))
                   )}
                 </div>
@@ -174,45 +207,52 @@ export const Header: React.FC = () => {
             )}
           </div>
 
-          {/* User Role Switcher Dropdown */}
           <div className="relative">
             <button
               id="user-role-menu-btn"
-              onClick={() => setShowRoleMenu(!showRoleMenu)}
-              className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+              type="button"
+              onClick={() => {
+                setShowRoleMenu(!showRoleMenu);
+                setShowNotifications(false);
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 pr-2 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 sm:pl-2 sm:pr-2.5"
+              aria-label="Account menu"
+              aria-expanded={showRoleMenu}
             >
-              <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
-                {user?.fullName?.charAt(0) || 'A'}
-              </div>
-              <div className="text-left hidden sm:block">
-                <p className="text-xs font-bold text-slate-900 leading-none">{user?.fullName}</p>
-                <p className="text-[10px] text-slate-500 capitalize">{user?.role?.replace('_', ' ')}</p>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-xs font-extrabold text-indigo-700">
+                {user?.fullName?.trim().charAt(0).toUpperCase() || 'A'}
+              </span>
+              <span className="hidden min-w-0 text-left sm:block">
+                <span className="block max-w-36 truncate text-xs font-bold text-slate-900">{user?.fullName}</span>
+                <span className="block max-w-36 truncate text-[10px] capitalize text-slate-500">{user?.role?.replace('_', ' ')}</span>
+              </span>
+              <ChevronDown className="hidden h-3.5 w-3.5 text-slate-400 sm:block" aria-hidden="true" />
             </button>
 
             {showRoleMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-3 py-2 border-b border-slate-100">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Signed in account</p>
-                  <p className="text-xs text-slate-600">Permissions are enforced by the server.</p>
+              <div className="app-header-popover absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_56px_rgba(15,23,42,0.18)]" role="dialog" aria-label="Account menu">
+                <div className="border-b border-slate-100 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Signed in as</p>
+                  <p className="mt-1 truncate text-xs font-bold text-slate-900">{user?.fullName}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">{user?.email}</p>
+                  <p className="mt-2 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold capitalize text-slate-600">{user?.role?.replace('_', ' ')}</p>
                 </div>
-                <div className="border-t border-slate-100 pt-1">
+                <div className="p-1.5">
                   <button
+                    type="button"
                     onClick={() => {
                       setShowRoleMenu(false);
                       logout();
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 transition-colors"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-rose-700 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
                     Sign out
                   </button>
                 </div>
               </div>
             )}
           </div>
-
         </div>
       </div>
     </header>

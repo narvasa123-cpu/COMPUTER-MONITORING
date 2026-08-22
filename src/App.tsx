@@ -40,23 +40,23 @@ function MainAppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans antialiased">
+    <div className="min-h-screen bg-transparent text-slate-800 flex flex-col font-sans antialiased">
       {/* Top Header */}
       <Header />
 
       {error && (
-        <div className="mx-4 mt-4 sm:mx-6 lg:mx-8 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+        <div className="mx-4 mt-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 shadow-sm sm:mx-6 lg:mx-8">
           <span>{error}</span>
-          <button onClick={refreshData} className="shrink-0 font-bold underline underline-offset-2">Retry</button>
+          <button type="button" onClick={refreshData} className="shrink-0 rounded-lg px-2 py-1 font-bold underline underline-offset-2 transition hover:bg-amber-100">Retry</button>
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Navigation Sidebar */}
         <Sidebar />
 
         {/* Main Content Viewport */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl w-full">
+        <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 xl:p-9">
           {activeTab === 'dashboard' && (
             <DashboardView
               onSelectDevice={(id) => {
@@ -157,7 +157,14 @@ function AuthenticatedApp() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div className="min-h-screen bg-slate-100 grid place-items-center text-sm text-slate-500">Loading monitoring console...</div>;
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#f6f8fc] p-6 text-center">
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+          <p className="text-sm font-bold text-slate-800">Loading monitoring console...</p>
+          <p className="mt-1 text-xs text-slate-500">Checking your authorized session.</p>
+        </div>
+      </div>
+    );
   }
   if (!user) return <LoginView />;
 
