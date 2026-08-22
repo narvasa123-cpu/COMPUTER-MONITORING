@@ -115,7 +115,7 @@ export const Sidebar: React.FC = () => {
         aria-label="Close navigation"
         tabIndex={isMobileOpen ? 0 : -1}
       />
-      <div className="app-sidebar-panel flex min-h-0 w-full flex-col bg-slate-950 text-slate-200">
+      <div className="app-sidebar-panel flex min-h-0 w-full flex-col overflow-hidden bg-slate-950 text-slate-200">
         <div className="app-sidebar-mobile-title flex items-center justify-between border-b border-white/10 px-4 py-3 lg:hidden">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-indigo-300">Operations console</p>
@@ -131,7 +131,7 @@ export const Sidebar: React.FC = () => {
           </button>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Primary navigation">
+        <nav className="app-sidebar-nav min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4" aria-label="Primary navigation">
           {groups.map((group, groupIndex) => (
             <section key={group.label} className={groupIndex === 0 ? '' : 'mt-6'} aria-label={group.label}>
               <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">{group.label}</p>
@@ -177,7 +177,7 @@ export const Sidebar: React.FC = () => {
           ))}
         </nav>
 
-        <div className="border-t border-white/10 bg-slate-950/80 p-3">
+        <div className="app-sidebar-footer shrink-0 border-t border-white/10 bg-slate-950/80 p-3">
           {summary && (
             <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] p-2.5">
               <div>

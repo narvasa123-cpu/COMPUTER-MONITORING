@@ -78,18 +78,33 @@ button:not(:disabled),
 }
 
 .app-sidebar {
-  position: sticky;
-  top: 72px;
+  position: relative;
+  top: auto;
   z-index: 30;
   display: flex;
   width: 17.25rem;
-  height: calc(100vh - 72px);
+  min-height: 0;
+  height: 100%;
   flex: 0 0 17.25rem;
-  align-self: flex-start;
+  align-self: stretch;
 }
 
 .app-sidebar-panel {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   box-shadow: 1px 0 0 rgba(15, 23, 42, 0.08), 8px 0 24px rgba(15, 23, 42, 0.025);
+}
+
+.app-sidebar-nav {
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.app-sidebar-footer {
+  flex: 0 0 auto;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 .app-sidebar-scrim,

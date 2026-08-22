@@ -40,7 +40,7 @@ function MainAppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-transparent text-slate-800 flex flex-col font-sans antialiased">
+    <div className="h-dvh min-h-0 overflow-hidden bg-transparent text-slate-800 flex flex-col font-sans antialiased">
       {/* Top Header */}
       <Header />
 
