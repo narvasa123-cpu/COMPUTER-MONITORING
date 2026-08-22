@@ -43,6 +43,12 @@ const DEFAULT_SETTINGS: SystemSettings = {
   connectionLostThresholdSec: 25,
   offlineThresholdSec: 50,
   telemetryRetentionPoints: 120,
+  networkHistoryRetentionPoints: 720,
+  networkDiagnosticIntervalSec: 60,
+  networkWeakSignalThresholdPercent: 35,
+  networkHighLatencyMs: 200,
+  networkPacketLossThresholdPercent: 10,
+  networkIncidentCooldownSec: 600,
   autoCreateTicketOnCritical: true,
   enableSoundAlerts: true,
   agentApiUrl: ''

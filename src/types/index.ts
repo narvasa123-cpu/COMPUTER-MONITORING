@@ -72,15 +72,96 @@ export interface BatteryInfo {
 }
 
 export interface NetworkInfo {
-  ip: string;
-  mac: string;
-  adapterName: string;
-  isConnected: boolean;
+  ip?: string | null;
+  mac?: string | null;
+  adapterName?: string | null;
+  isConnected?: boolean | null;
   bytesInPerSec?: number;
   bytesOutPerSec?: number;
   linkSpeedMbps?: number;
   gateway?: string;
   dns?: string[];
+}
+
+export type NetworkDiagnosticStatus = 'ONLINE' | 'LIMITED' | 'NO INTERNET' | 'LOCAL NETWORK ERROR' | 'DNS ERROR' | 'DISCONNECTED' | 'CRITICAL' | 'UNAVAILABLE';
+export type NetworkTestResult = 'PASS' | 'FAIL' | 'UNAVAILABLE';
+
+export interface WifiDiagnostics {
+  available: boolean;
+  adapterName?: string | null;
+  adapterStatus?: string | null;
+  connectionState?: string | null;
+  ssid?: string | null;
+  bssid?: string | null;
+  signalQuality?: number | null;
+  radioType?: string | null;
+  band?: string | null;
+  frequencyMhz?: number | null;
+  linkSpeedMbps?: number | null;
+  receiveLinkSpeedMbps?: number | null;
+  transmitLinkSpeedMbps?: number | null;
+  ipv4?: string | null;
+  ipv6?: string | null;
+  subnetMask?: string | null;
+  defaultGateway?: string | null;
+  defaultGatewayIpv6?: string | null;
+  dnsServers?: string[];
+  dhcpEnabled?: boolean | null;
+  dhcpServer?: string | null;
+  networkProfile?: string | null;
+  networkCategory?: string | null;
+  mac?: string | null;
+  connectionObservedSince?: string | null;
+  connectionDurationSeconds?: number | null;
+  gatewayReachable?: boolean | null;
+  dnsResolution?: boolean | null;
+  internetReachable?: boolean | null;
+  internetIcmpReachable?: boolean | null;
+  internetHttpReachable?: boolean | null;
+  packetLossPercent?: number | null;
+  avgLatencyMs?: number | null;
+  minLatencyMs?: number | null;
+  maxLatencyMs?: number | null;
+  failedProbes?: number | null;
+  responseTimeMs?: number | null;
+  testedAt?: string | null;
+}
+
+export interface NetworkDiagnosticTest {
+  result: NetworkTestResult;
+  detail: string;
+}
+
+export interface NetworkDiagnosticResult {
+  id?: string;
+  status: NetworkDiagnosticStatus;
+  code: string;
+  severity: Severity;
+  confidence: 'High' | 'Medium' | 'Low';
+  diagnosis: string;
+  analysis: string;
+  evidence: string[];
+  recommendedActions: string[];
+  tests: Record<string, NetworkDiagnosticTest>;
+  wifi?: WifiDiagnostics | null;
+  sourceTimestamp?: string;
+  receivedAt?: string;
+}
+
+export interface NetworkDiagnosticsResponse {
+  deviceId: string;
+  agentStatus: 'CONNECTED' | 'OFFLINE';
+  lastHeartbeatAt?: string | null;
+  lastNetworkTestAt?: string | null;
+  lastNetworkTestReceivedAt?: string | null;
+  lastSuccessfulNetworkTestAt?: string | null;
+  telemetryStale: boolean;
+  networkDiagnosticIntervalSec: number;
+  supportsOnDemandNetworkDiagnostics: boolean;
+  pendingCommand?: { id: string; status: 'queued' | 'dispatched'; scope?: string; requestedAt?: string } | null;
+  lastCommand?: { id: string; status: 'queued' | 'dispatched' | 'completed' | 'expired'; scope?: string; requestedAt?: string; completedAt?: string; expiredAt?: string } | null;
+  current: NetworkDiagnosticResult | null;
+  history: NetworkDiagnosticResult[];
 }
 
 export interface ProcessItem {
@@ -128,6 +209,8 @@ export interface TelemetryPayload {
   uptimeSeconds: number;
   lastBootTime: string;
   processes: ProcessItem[];
+  wifiDiagnostics?: WifiDiagnostics;
+  commandResults?: Array<{ id: string; type: string; status: string; scope?: string }>;
   fanSpeedRpm?: number;
   motherboardTempC?: number;
 }
@@ -348,6 +431,12 @@ export interface SystemSettings {
   connectionLostThresholdSec: number;
   offlineThresholdSec: number;
   telemetryRetentionPoints: number;
+  networkHistoryRetentionPoints: number;
+  networkDiagnosticIntervalSec: number;
+  networkWeakSignalThresholdPercent: number;
+  networkHighLatencyMs: number;
+  networkPacketLossThresholdPercent: number;
+  networkIncidentCooldownSec: number;
   autoCreateTicketOnCritical: boolean;
   enableSoundAlerts: boolean;
   agentApiUrl: string;
@@ -370,6 +459,20 @@ export interface DashboardSummary {
   devicesWithHighCpu: number;
   devicesWithHighMemory: number;
   devicesWithHighTemp: number;
+  networkHealth?: {
+    monitoredDevices: number;
+    online: number;
+    limited: number;
+    noInternet: number;
+    localNetworkError: number;
+    dnsError: number;
+    disconnected: number;
+    critical: number;
+    activeIncidents: number;
+    unavailable: number;
+    stale: number;
+    clusters: Array<{ locationId: string; locationName: string; affectedDevices: number; activeIssues: number; detectedWithinMinutes: number; possibleSharedCause: string }>;
+  };
   statusDistribution: { status: string; count: number; color: string }[];
   problemsByType: { type: string; count: number }[];
   problemsBySeverity: { severity: string; count: number }[];

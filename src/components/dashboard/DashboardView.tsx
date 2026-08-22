@@ -157,6 +157,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectDevice }) 
         </div>
       </div>
 
+      {/* Wi-Fi state is computed only from agent network diagnostics, never from asset records. */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+        <div className="flex flex-col gap-2 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Wifi className="h-4 w-4 text-indigo-600" />
+            <div>
+              <h3 className="text-xs font-bold text-slate-900">Network Health</h3>
+              <p className="text-[11px] text-slate-500">Separate Wi-Fi, local gateway, DNS, and internet results from the Windows agent.</p>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-slate-500">{summary?.networkHealth?.monitoredDevices ?? 0} fresh agent network reports</span>
+        </div>
+        {(summary?.networkHealth?.monitoredDevices ?? 0) === 0 ? (
+          <div className="py-5 text-center text-xs text-slate-500">{(summary?.networkHealth?.stale ?? 0) > 0 ? 'Only stale network reports are available. Reconnect the agent or run a fresh diagnostic before treating them as current.' : 'No Wi-Fi diagnostics have been received yet. Devices remain unclassified until an updated Windows agent performs a real test.'}</div>
+        ) : (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-9">
+              {[
+                ['Online', summary?.networkHealth?.online ?? 0, 'text-emerald-700 bg-emerald-50 border-emerald-200'],
+                ['Limited', summary?.networkHealth?.limited ?? 0, 'text-amber-700 bg-amber-50 border-amber-200'],
+                ['No Internet', summary?.networkHealth?.noInternet ?? 0, 'text-rose-700 bg-rose-50 border-rose-200'],
+                ['Local Error', summary?.networkHealth?.localNetworkError ?? 0, 'text-rose-700 bg-rose-50 border-rose-200'],
+                ['DNS Error', summary?.networkHealth?.dnsError ?? 0, 'text-rose-700 bg-rose-50 border-rose-200'],
+                ['Disconnected', summary?.networkHealth?.disconnected ?? 0, 'text-slate-700 bg-slate-50 border-slate-200'],
+                ['Unavailable', summary?.networkHealth?.unavailable ?? 0, 'text-slate-700 bg-slate-50 border-slate-200'],
+                ['Active Incidents', summary?.networkHealth?.activeIncidents ?? 0, 'text-indigo-700 bg-indigo-50 border-indigo-200'],
+                ['Stale Reports', summary?.networkHealth?.stale ?? 0, 'text-slate-600 bg-slate-50 border-slate-200']
+              ].map(([label, count, classes]) => (
+                <div key={String(label)} className={`rounded-lg border p-2.5 ${classes}`}>
+                  <p className="text-[10px] font-bold uppercase">{label}</p>
+                  <p className="mt-0.5 text-xl font-black">{count}</p>
+                </div>
+              ))}
+            </div>
+            {(summary?.networkHealth?.clusters?.length ?? 0) > 0 && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                <p className="font-bold">Possible shared environment issue</p>
+                {summary?.networkHealth?.clusters.map(cluster => <p key={cluster.locationId} className="mt-1">{cluster.affectedDevices} device(s) in {cluster.locationName} reported active network faults within {cluster.detectedWithinMinutes} minutes. Check the access point, router, switch, DNS, or upstream network service.</p>)}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* 2. Hardware Resource Stress & Diagnostic Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3">

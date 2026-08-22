@@ -29,6 +29,7 @@ import { Device, DiagnosticIssue, RepairTicket, MaintenanceRecord } from '../../
 import { StatusBadge, SeverityBadge } from '../common/Badge';
 import { useMonitoring } from '../../context/MonitoringContext';
 import { useAuth } from '../../context/AuthContext';
+import { NetworkDiagnosticsPanel } from './NetworkDiagnosticsPanel';
 
 interface DeviceDetailsViewProps {
   deviceId: string;
@@ -55,7 +56,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   const [deviceIssues, setDeviceIssues] = useState<DiagnosticIssue[]>([]);
   const [deviceTickets, setDeviceTickets] = useState<RepairTicket[]>([]);
   const [deviceMaintenance, setDeviceMaintenance] = useState<MaintenanceRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<'telemetry' | 'hardware' | 'processes' | 'issues' | 'tickets' | 'maintenance'>('telemetry');
+  const [activeTab, setActiveTab] = useState<'telemetry' | 'network' | 'hardware' | 'processes' | 'issues' | 'tickets' | 'maintenance'>('telemetry');
   const [loading, setLoading] = useState<boolean>(true);
   const [deleting, setDeleting] = useState<boolean>(false);
 
@@ -165,8 +166,8 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   const handleSafeShutdown = () => undefined;
   const handlePowerProfile = (_profile: 'balanced' | 'high_performance') => undefined;
 
-  const formatNetworkRate = (bytesPerSecond?: number) =>
-    `${(((bytesPerSecond || 0) * 8) / 1_000_000).toFixed(2)} Mbps`;
+  const formatNetworkRate = (bytesPerSecond?: number | null) =>
+    bytesPerSecond === undefined || bytesPerSecond === null ? 'Unavailable' : `${((bytesPerSecond * 8) / 1_000_000).toFixed(2)} Mbps`;
 
   const formatLastHeartbeat = (iso?: string) => {
     if (!iso) return 'Never connected';
@@ -189,6 +190,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
 
   const tel = device.latestTelemetry;
   const specs = device.specs;
+  const canViewNetworkDiagnostics = user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician';
 
   return (
     <div className="space-y-4">
@@ -360,7 +362,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200 bg-white px-3 pt-2 rounded-t-xl">
+      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 pt-2 rounded-t-xl [&>button]:shrink-0">
         <button
           onClick={() => setActiveTab('telemetry')}
           className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold border-b-2 transition-all ${
@@ -370,6 +372,18 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
           <Activity className="w-4 h-4" />
           <span>Live Telemetry & Sensors</span>
         </button>
+
+        {canViewNetworkDiagnostics && (
+          <button
+            onClick={() => setActiveTab('network')}
+            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold border-b-2 transition-all ${
+              activeTab === 'network' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Wifi className="w-4 h-4" />
+            <span>Wi-Fi Diagnostics</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('hardware')}
@@ -536,7 +550,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
                   <span>Upload:</span>
                   <span className="font-bold text-slate-800">{formatNetworkRate(tel?.network?.bytesOutPerSec)}</span>
                 </div>
-                <div className="pt-1 text-[10px] truncate" title={tel?.network?.adapterName}>
+                <div className="pt-1 text-[10px] truncate" title={tel?.network?.adapterName || undefined}>
                   {tel?.network?.adapterName || 'Waiting for agent data'}
                 </div>
               </div>
@@ -689,6 +703,13 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'network' && canViewNetworkDiagnostics && (
+        <NetworkDiagnosticsPanel
+          device={device}
+          canRunDiagnostics={user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician'}
+        />
       )}
 
       {/* Tab 2: Hardware Specifications */}

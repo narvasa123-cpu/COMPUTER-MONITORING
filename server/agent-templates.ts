@@ -26,6 +26,7 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     `    [string]$ServerUrl = "${cleanUrl}",`,
     `    [string]$RegistrationCode = "${registrationCode}",`,
     '    [int]$IntervalSeconds = 10,',
+    '    [int]$NetworkDiagnosticIntervalSeconds = 60,',
     '    [switch]$SkipPreflightCheck,',
     '    [switch]$VerboseConnectivity,',
     '    [switch]$InstallAsStartupTask',
@@ -377,30 +378,28 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '        $bios = Get-CimInstance Win32_BIOS -ErrorAction SilentlyContinue',
     '        $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1',
     '',
-    '        $isLaptop = $false',
+    '        $isLaptop = $null',
     '        $enc = Get-CimInstance Win32_SystemEnclosure -ErrorAction SilentlyContinue | Select-Object -First 1',
     '        if ($enc -and $enc.ChassisTypes) {',
-    '            if ($enc.ChassisTypes -contains 8 -or $enc.ChassisTypes -contains 9 -or $enc.ChassisTypes -contains 10 -or $enc.ChassisTypes -contains 14) {',
-    '                $isLaptop = $true',
-    '            }',
+    '            $isLaptop = ($enc.ChassisTypes -contains 8 -or $enc.ChassisTypes -contains 9 -or $enc.ChassisTypes -contains 10 -or $enc.ChassisTypes -contains 14)',
     '        }',
     '',
-    '        $totalRamBytes = 17179869184',
+    '        $totalRamBytes = $null',
     '        if ($os -and $os.TotalVisibleMemorySize) {',
     '            $totalRamBytes = [int64]$os.TotalVisibleMemorySize * 1024',
     '        }',
     '',
-    '        $cpuModel = if ($cpu -and $cpu.Name) { $cpu.Name.Trim() } else { "Multi-Core Processor" }',
-    '        $cpuCores = if ($cpu -and $cpu.NumberOfCores) { [int]$cpu.NumberOfCores } else { 4 }',
-    '        $cpuLogical = if ($cpu -and $cpu.NumberOfLogicalProcessors) { [int]$cpu.NumberOfLogicalProcessors } else { 4 }',
-    '        $osCaption = if ($os -and $os.Caption) { "$($os.Caption) $($os.OSArchitecture)" } else { "Microsoft Windows" }',
-    '        $osVer = if ($os -and $os.Version) { $os.Version } else { "10.0.22631" }',
-    '        $osBuild = if ($os -and $os.BuildNumber) { $os.BuildNumber } else { "22631" }',
-    '        $osArch = if ($os -and $os.OSArchitecture) { $os.OSArchitecture } else { "64-bit" }',
-    '        $mfg = if ($cs -and $cs.Manufacturer) { "$($cs.Manufacturer) $($cs.Model)" } else { "Standard OEM" }',
-    '        $biosVer = if ($bios -and $bios.SMBIOSBIOSVersion) { $bios.SMBIOSBIOSVersion } else { "1.0" }',
-    '        $serial = if ($bios -and $bios.SerialNumber) { $bios.SerialNumber } else { "SN-$env:COMPUTERNAME" }',
-    '        $gpuName = if ($gpu -and $gpu.Name) { $gpu.Name } else { "Generic Display Adapter" }',
+    '        $cpuModel = if ($cpu -and $cpu.Name) { $cpu.Name.Trim() } else { $null }',
+    '        $cpuCores = if ($cpu -and $cpu.NumberOfCores) { [int]$cpu.NumberOfCores } else { $null }',
+    '        $cpuLogical = if ($cpu -and $cpu.NumberOfLogicalProcessors) { [int]$cpu.NumberOfLogicalProcessors } else { $null }',
+    '        $osCaption = if ($os -and $os.Caption) { "$($os.Caption) $($os.OSArchitecture)" } else { $null }',
+    '        $osVer = if ($os -and $os.Version) { $os.Version } else { $null }',
+    '        $osBuild = if ($os -and $os.BuildNumber) { $os.BuildNumber } else { $null }',
+    '        $osArch = if ($os -and $os.OSArchitecture) { $os.OSArchitecture } else { $null }',
+    '        $mfg = if ($cs -and $cs.Manufacturer) { "$($cs.Manufacturer) $($cs.Model)" } else { $null }',
+    '        $biosVer = if ($bios -and $bios.SMBIOSBIOSVersion) { $bios.SMBIOSBIOSVersion } else { $null }',
+    '        $serial = if ($bios -and $bios.SerialNumber) { $bios.SerialNumber } else { $null }',
+    '        $gpuName = if ($gpu -and $gpu.Name) { $gpu.Name } else { $null }',
     '',
     '        return @{',
     '            osName = $osCaption',
@@ -419,21 +418,7 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '        }',
     '    } catch {',
     '        Write-Host "[WARN] Hardware specs Cim collection error: $($_.Exception.Message)" -ForegroundColor Yellow',
-    '        return @{',
-    '            osName = "Microsoft Windows 11 Pro 64-bit"',
-    '            osVersion = "10.0.22631"',
-    '            osBuild = "22631"',
-    '            osArchitecture = "64-bit"',
-    '            cpuModel = "Intel/AMD Processor"',
-    '            cpuCores = 4',
-    '            cpuLogicalProcessors = 8',
-    '            totalRamBytes = 17179869184',
-    '            motherboard = "Standard Motherboard"',
-    '            biosVersion = "1.0"',
-    '            serialNumber = "SN-WIN-PROD"',
-    '            gpuModel = "Standard Graphics Adapter"',
-    '            isLaptop = $false',
-    '        }',
+    '        return @{}',
     '    }',
     '}',
     '',
@@ -459,7 +444,8 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '        serialNumber = $specs.serialNumber',
     '        gpuModel = $specs.gpuModel',
     '        isLaptop = $specs.isLaptop',
-    '        agentVersion = "2.4.0-ps1"',
+    '        agentVersion = "2.5.0-ps1"',
+    '        agentCapabilities = @("wifi_diagnostics", "network_diagnostic_commands")',
     '    } | ConvertTo-Json -Depth 5',
     '',
     '    try {',
@@ -468,6 +454,8 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '        if ($regResponse.success -and $token) {',
     '            $DeviceToken = $token',
     '            $DeviceId = $regResponse.deviceId',
+    '            if ($regResponse.heartbeatIntervalSec -and [int]$regResponse.heartbeatIntervalSec -ge 2) { $IntervalSeconds = [int]$regResponse.heartbeatIntervalSec }',
+    '            if ($regResponse.networkDiagnosticIntervalSec -and [int]$regResponse.networkDiagnosticIntervalSec -ge 10) { $NetworkDiagnosticIntervalSeconds = [int]$regResponse.networkDiagnosticIntervalSec }',
     '            Write-Host "[SUCCESS] Registered successfully! Assigned Device ID: $DeviceId" -ForegroundColor Green',
     '',
     '            @{',
@@ -491,6 +479,209 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     'Write-Host "=======================================================================" -ForegroundColor Green',
     '',
     '$consecutiveErrors = 0',
+    '$lastWiFiDiagnostics = $null',
+    '$lastNetworkDiagnosticAt = [datetime]::MinValue',
+    '$forceNetworkDiagnostic = $true',
+    '$pendingCommandResults = @()',
+    '',
+    String.raw`
+# ---------------------------------------------------------------------
+# Real Windows Wi-Fi connectivity diagnostics. No values in this result
+# are fabricated: unavailable fields remain null and unavailable tests
+# remain null so the central console can distinguish them from failures.
+# ---------------------------------------------------------------------
+function Get-WifiDiagnostics {
+    $testedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $result = [ordered]@{
+        available = $false
+        adapterName = $null
+        adapterStatus = "NOT AVAILABLE"
+        connectionState = "NOT AVAILABLE"
+        ssid = $null
+        bssid = $null
+        signalQuality = $null
+        radioType = $null
+        band = $null
+        frequencyMhz = $null
+        channel = $null
+        linkSpeedMbps = $null
+        receiveLinkSpeedMbps = $null
+        transmitLinkSpeedMbps = $null
+        ipv4 = $null
+        ipv6 = $null
+        subnetMask = $null
+        defaultGateway = $null
+        defaultGatewayIpv6 = $null
+        dnsServers = @()
+        dhcpEnabled = $null
+        dhcpServer = $null
+        networkProfile = $null
+        networkCategory = $null
+        mac = $null
+        connectionObservedSince = $null
+        connectionDurationSeconds = $null
+        gatewayReachable = $null
+        dnsResolution = $null
+        internetReachable = $null
+        internetIcmpReachable = $null
+        internetHttpReachable = $null
+        packetLossPercent = $null
+        avgLatencyMs = $null
+        minLatencyMs = $null
+        maxLatencyMs = $null
+        failedProbes = $null
+        responseTimeMs = $null
+        testedAt = $testedAt
+    }
+
+    $wifiAdapter = $null
+    try {
+        $wifiAdapter = Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object {
+            $_.NdisPhysicalMedium -eq "Native 802.11" -or $_.InterfaceDescription -match "Wireless|Wi-Fi|802\.11"
+        } | Select-Object -First 1
+    } catch { }
+
+    $netshFields = @{}
+    try {
+        $netshLines = @(netsh wlan show interfaces 2>$null)
+        foreach ($line in $netshLines) {
+            if ($line -match '^\s*([^:]+?)\s*:\s*(.*)$') {
+                $key = $matches[1].Trim().ToLowerInvariant()
+                $netshFields[$key] = $matches[2].Trim()
+            }
+        }
+    } catch { }
+
+    if ($wifiAdapter -or $netshFields.ContainsKey("name") -or $netshFields.ContainsKey("state")) {
+        $result.available = $true
+    } else {
+        return [pscustomobject]$result
+    }
+
+    $interfaceIndex = $null
+    if ($wifiAdapter) {
+        $result.adapterName = $wifiAdapter.Name
+        $result.adapterStatus = [string]$wifiAdapter.Status
+        $interfaceIndex = $wifiAdapter.ifIndex
+        if ($wifiAdapter.MacAddress) { $result.mac = [string]$wifiAdapter.MacAddress }
+    }
+    if (-not $result.adapterName -and $netshFields.ContainsKey("name")) { $result.adapterName = $netshFields["name"] }
+    if ($netshFields.ContainsKey("description") -and -not $result.adapterName) { $result.adapterName = $netshFields["description"] }
+
+    $netshState = if ($netshFields.ContainsKey("state")) { [string]$netshFields["state"] } else { "" }
+    $stateNormalized = $netshState.Trim().ToLowerInvariant()
+    if ($stateNormalized -eq "connected") {
+        $result.connectionState = "CONNECTED"
+    } elseif ([string]$result.adapterStatus -match "Disabled") {
+        $result.connectionState = "DISABLED"
+    } elseif ($stateNormalized -eq "disconnected" -or [string]$result.adapterStatus -match "Disconnected|Not Present") {
+        $result.connectionState = "DISCONNECTED"
+    } else {
+        $result.connectionState = "ERROR"
+    }
+
+    if ($netshFields.ContainsKey("ssid")) { $result.ssid = $netshFields["ssid"] }
+    if ($netshFields.ContainsKey("bssid")) { $result.bssid = $netshFields["bssid"] }
+    if ($netshFields.ContainsKey("radio type")) { $result.radioType = $netshFields["radio type"] }
+    if ($netshFields.ContainsKey("band")) { $result.band = $netshFields["band"] }
+    if ($netshFields.ContainsKey("channel") -and $netshFields["channel"] -match "(\d+)") { $result.channel = [int]$matches[1] }
+    if ($netshFields.ContainsKey("signal") -and $netshFields["signal"] -match "(\d+)\s*%") { $result.signalQuality = [int]$matches[1] }
+    if ($netshFields.ContainsKey("receive rate (mbps)") -and $netshFields["receive rate (mbps)"] -match "([\d\.]+)") { $result.receiveLinkSpeedMbps = [double]$matches[1] }
+    if ($netshFields.ContainsKey("transmit rate (mbps)") -and $netshFields["transmit rate (mbps)"] -match "([\d\.]+)") { $result.transmitLinkSpeedMbps = [double]$matches[1] }
+    $linkRates = @($result.receiveLinkSpeedMbps, $result.transmitLinkSpeedMbps) | Where-Object { $null -ne $_ }
+    if ($linkRates.Count -gt 0) { $result.linkSpeedMbps = [math]::Round(($linkRates | Measure-Object -Maximum).Maximum, 2) }
+
+    if ($interfaceIndex) {
+        try {
+            $ipConfig = Get-NetIPConfiguration -InterfaceIndex $interfaceIndex -ErrorAction Stop
+            $ipv4Address = @($ipConfig.IPv4Address | Where-Object { $_.IPAddress } | Select-Object -First 1)
+            $ipv6Address = @($ipConfig.IPv6Address | Where-Object { $_.IPAddress -and $_.IPAddress -notmatch '^fe80:' } | Select-Object -First 1)
+            if ($ipv4Address.Count -gt 0) { $result.ipv4 = [string]$ipv4Address[0].IPAddress }
+            if ($ipv6Address.Count -gt 0) { $result.ipv6 = [string]$ipv6Address[0].IPAddress }
+        } catch { }
+        try {
+            $adapterConfig = Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "InterfaceIndex = $interfaceIndex" -ErrorAction Stop | Select-Object -First 1
+            if ($adapterConfig) {
+                if (-not $result.ipv4 -and $adapterConfig.IPAddress) { $result.ipv4 = @($adapterConfig.IPAddress | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1)[0] }
+                if (-not $result.ipv6 -and $adapterConfig.IPAddress) { $result.ipv6 = @($adapterConfig.IPAddress | Where-Object { $_ -match ':' } | Select-Object -First 1)[0] }
+                if ($adapterConfig.IPSubnet) { $result.subnetMask = @($adapterConfig.IPSubnet | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1)[0] }
+                if ($adapterConfig.DNSServerSearchOrder) { $result.dnsServers = @($adapterConfig.DNSServerSearchOrder | Where-Object { $_ }) }
+                if ($adapterConfig.DefaultIPGateway) { $result.defaultGateway = @($adapterConfig.DefaultIPGateway | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1)[0] }
+                $result.dhcpEnabled = [bool]$adapterConfig.DHCPEnabled
+                if ($adapterConfig.DHCPServer) { $result.dhcpServer = [string]$adapterConfig.DHCPServer }
+                if (-not $result.mac -and $adapterConfig.MACAddress) { $result.mac = [string]$adapterConfig.MACAddress }
+            }
+        } catch { }
+        if (-not $result.defaultGateway) {
+            try { $result.defaultGateway = @(Get-NetRoute -InterfaceIndex $interfaceIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction Stop | Where-Object { $_.NextHop -and $_.NextHop -ne "0.0.0.0" } | Select-Object -First 1).NextHop } catch { }
+        }
+        try { $result.defaultGatewayIpv6 = @(Get-NetRoute -InterfaceIndex $interfaceIndex -DestinationPrefix "::/0" -ErrorAction Stop | Where-Object { $_.NextHop -and $_.NextHop -ne "::" } | Select-Object -First 1).NextHop } catch { }
+        try {
+            $profile = Get-NetConnectionProfile -InterfaceIndex $interfaceIndex -ErrorAction Stop | Select-Object -First 1
+            if ($profile) {
+                if ($profile.Name) { $result.networkProfile = [string]$profile.Name }
+                if ($profile.NetworkCategory) { $result.networkCategory = [string]$profile.NetworkCategory }
+                if ($result.connectionState -eq "ERROR") { $result.connectionState = "CONNECTED" }
+            }
+        } catch { }
+    }
+
+    if ($result.connectionState -eq "CONNECTED") {
+        $connectionKey = "$($result.adapterName)|$($result.ssid)|$($result.bssid)"
+        if ($script:WiFiObservedConnectionKey -ne $connectionKey -or -not $script:WiFiObservedConnectionAt) {
+            $script:WiFiObservedConnectionKey = $connectionKey
+            $script:WiFiObservedConnectionAt = Get-Date
+        }
+        $result.connectionObservedSince = $script:WiFiObservedConnectionAt.ToUniversalTime().ToString("o")
+        $result.connectionDurationSeconds = [int]((Get-Date) - $script:WiFiObservedConnectionAt).TotalSeconds
+    } else {
+        $script:WiFiObservedConnectionKey = $null
+        $script:WiFiObservedConnectionAt = $null
+    }
+
+    if ($result.connectionState -ne "CONNECTED" -or (-not $result.ipv4 -and -not $result.ipv6)) {
+        return [pscustomobject]$result
+    }
+
+    if ($result.defaultGateway) {
+        try {
+            $gatewayResponses = @(Test-Connection -ComputerName $result.defaultGateway -Count 3 -ErrorAction SilentlyContinue)
+            $result.gatewayReachable = $gatewayResponses.Count -gt 0
+        } catch { $result.gatewayReachable = $false }
+    }
+    if ($result.gatewayReachable -ne $true) {
+        return [pscustomobject]$result
+    }
+
+    try {
+        $internetResponses = @(Test-Connection -ComputerName "1.1.1.1" -Count 4 -ErrorAction SilentlyContinue)
+        $successfulProbes = $internetResponses.Count
+        $result.internetIcmpReachable = $successfulProbes -gt 0
+        $result.failedProbes = 4 - $successfulProbes
+        $latencies = @($internetResponses | ForEach-Object { if ($null -ne $_.ResponseTime) { [double]$_.ResponseTime } elseif ($null -ne $_.Latency) { [double]$_.Latency } } | Where-Object { $null -ne $_ })
+        if ($latencies.Count -gt 0) {
+            $result.packetLossPercent = [math]::Round((($result.failedProbes / 4) * 100), 1)
+            $result.avgLatencyMs = [math]::Round(($latencies | Measure-Object -Average).Average, 1)
+            $result.minLatencyMs = [math]::Round(($latencies | Measure-Object -Minimum).Minimum, 1)
+            $result.maxLatencyMs = [math]::Round(($latencies | Measure-Object -Maximum).Maximum, 1)
+        }
+    } catch { }
+    try {
+        $dnsAnswer = Resolve-DnsName -Name "www.msftconnecttest.com" -Type A -DnsOnly -ErrorAction Stop | Select-Object -First 1
+        $result.dnsResolution = $null -ne $dnsAnswer
+    } catch { $result.dnsResolution = $false }
+    try {
+        $responseWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $response = Invoke-WebRequest -Uri "https://www.msftconnecttest.com/connecttest.txt" -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
+        $responseWatch.Stop()
+        $result.internetHttpReachable = $response.StatusCode -ge 200 -and $response.StatusCode -lt 400
+        $result.responseTimeMs = [int]$responseWatch.ElapsedMilliseconds
+    } catch { $result.internetHttpReachable = $false }
+    $result.internetReachable = ($result.internetIcmpReachable -eq $true -or $result.internetHttpReachable -eq $true)
+
+    return [pscustomobject]$result
+}
+`,
     '',
     '# Telemetry Collection Loop',
     'while ($true) {',
@@ -498,18 +689,18 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '        $nowIso = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")',
     '',
     '        # CPU Usage',
-    '        $cpuPct = 15.0',
+    '        $cpuPct = $null',
     '        try {',
     '            $cpuSamples = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average',
     '            if ($cpuSamples -and $cpuSamples.Average) { $cpuPct = [math]::Round($cpuSamples.Average, 1) }',
     '        } catch { }',
     '',
     '        # Memory Usage',
-    '        $totalRamBytes = 17179869184',
-    '        $usedRamBytes = 8589934592',
-    '        $ramPct = 50.0',
-    '        $uptimeSeconds = 3600',
-    '        $lastBootStr = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")',
+    '        $totalRamBytes = $null',
+    '        $usedRamBytes = $null',
+    '        $ramPct = $null',
+    '        $uptimeSeconds = $null',
+    '        $lastBootStr = $null',
     '        try {',
     '            $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue',
     '            if ($osInfo) {',
@@ -532,10 +723,9 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '                $cap = [int64]$_.Size',
     '                $free = [int64]$_.FreeSpace',
     '                $used = $cap - $free',
-    '                $pct = 0',
+    '                $pct = $null',
     '                if ($cap -gt 0) { $pct = [math]::Round(($used / $cap) * 100, 1) }',
-    '                $healthStatus = "Healthy"',
-    '                if ($pct -gt 92) { $healthStatus = "Warning" }',
+    '                $healthStatus = if ($null -eq $pct) { "Unknown" } elseif ($pct -gt 92) { "Warning" } else { "Healthy" }',
     '',
     '                $storageList += @{',
     '                    drive = $_.DeviceID',
@@ -545,14 +735,14 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '                    freeBytes = $free',
     '                    fsType = $_.FileSystem',
     '                    health = $healthStatus',
-    '                    smartStatus = "OK"',
+    '                    smartStatus = $null',
     '                    usagePercent = $pct',
     '                }',
     '            }',
     '        } catch { }',
     '',
     '        # Battery',
-    '        $batteryInfo = @{ present = $false; percentage = 100; isCharging = $true; healthPercent = 100 }',
+    '        $batteryInfo = $null',
     '        try {',
     '            $bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1',
     '            if ($bat) {',
@@ -560,27 +750,47 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '                    present = $true',
     '                    percentage = [int]$bat.EstimatedChargeRemaining',
     '                    isCharging = ($bat.BatteryStatus -eq 2 -or $bat.BatteryStatus -eq 6)',
-    '                    healthPercent = 95',
+    '                    healthPercent = $null',
     '                    timeRemainingMin = [int]$bat.EstimatedRunTime',
     '                }',
     '            }',
     '        } catch { }',
     '',
-    '        # Network details',
-    '        $ip = "127.0.0.1"',
-    '        $mac = "00:00:00:00:00:00"',
-    '        $adapterName = "Ethernet/Wi-Fi"',
-    '        try {',
-    '            $netAdapter = Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "IPEnabled = TRUE" -ErrorAction SilentlyContinue | Select-Object -First 1',
-    '            if ($netAdapter -and $netAdapter.IPAddress) { $ip = $netAdapter.IPAddress[0] }',
-    '            if ($netAdapter -and $netAdapter.MACAddress) { $mac = $netAdapter.MACAddress }',
-    '            if ($netAdapter -and $netAdapter.Description) { $adapterName = $netAdapter.Description }',
-    '        } catch { }',
+    '        # Network details. Wi-Fi diagnostics are sampled on a configurable',
+    '        # interval because gateway, DNS, and internet probes are real traffic.',
+    '        $elapsedNetworkSeconds = ((Get-Date) - $lastNetworkDiagnosticAt).TotalSeconds',
+    '        if ($forceNetworkDiagnostic -or -not $lastWiFiDiagnostics -or $elapsedNetworkSeconds -ge [math]::Max(10, $NetworkDiagnosticIntervalSeconds)) {',
+    '            $lastWiFiDiagnostics = Get-WifiDiagnostics',
+    '            $lastNetworkDiagnosticAt = Get-Date',
+    '            $forceNetworkDiagnostic = $false',
+    '        }',
+    '        $wifiDiagnostics = $lastWiFiDiagnostics',
+    '        $ip = $null',
+    '        $mac = $null',
+    '        $adapterName = $null',
+    '        $isConnected = $null',
+    '        if ($wifiDiagnostics -and $wifiDiagnostics.available) {',
+    '            $ip = $wifiDiagnostics.ipv4',
+    '            $mac = $wifiDiagnostics.mac',
+    '            $adapterName = $wifiDiagnostics.adapterName',
+    '            $isConnected = ($wifiDiagnostics.connectionState -eq "CONNECTED")',
+    '        }',
+    '        if (-not $ip) {',
+    '            try {',
+    '                $netAdapter = Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "IPEnabled = TRUE" -ErrorAction SilentlyContinue | Select-Object -First 1',
+    '                if ($netAdapter -and $netAdapter.IPAddress) { $ip = @($netAdapter.IPAddress | Where-Object { $_ -match "^\\d+\\.\\d+\\.\\d+\\.\\d+$" } | Select-Object -First 1)[0] }',
+    '                if ($netAdapter -and $netAdapter.MACAddress -and -not $mac) { $mac = $netAdapter.MACAddress }',
+    '                if ($netAdapter -and $netAdapter.Description -and -not $adapterName) { $adapterName = $netAdapter.Description }',
+    '                if ($netAdapter) { $isConnected = $true }',
+    '            } catch { }',
+    '        }',
     '',
     '        # Live network throughput (all active interfaces, excluding virtual loopback/tunnel adapters)',
-    '        $bytesInPerSec = 0',
-    '        $bytesOutPerSec = 0',
+    '        $bytesInPerSec = $null',
+    '        $bytesOutPerSec = $null',
     '        try {',
+    '            $bytesInPerSec = 0',
+    '            $bytesOutPerSec = 0',
     '            $networkCounters = Get-Counter -Counter "\\Network Interface(*)\\Bytes Received/sec", "\\Network Interface(*)\\Bytes Sent/sec" -ErrorAction Stop',
     '            foreach ($sample in $networkCounters.CounterSamples) {',
     '                if ($sample.Path -notmatch "Loopback|isatap|Teredo") {',
@@ -608,7 +818,7 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '',
     '        # Remote Desktop availability. This only reports the actual local Windows configuration;',
     '        # it does not open a port, alter firewall rules, or enable remote access.',
-    '        $remoteAccess = @{ protocol = "rdp"; enabled = $false; host = $env:COMPUTERNAME; port = 3389; reason = "Remote Desktop service is unavailable" }',
+    '        $remoteAccess = @{ protocol = "rdp"; enabled = $null; host = $env:COMPUTERNAME; port = 3389; reason = "Remote Desktop status is unavailable" }',
     '        try {',
     '            $rdpService = Get-Service -Name TermService -ErrorAction Stop',
     '            $rdpSetting = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -ErrorAction Stop',
@@ -634,14 +844,18 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '                ip = $ip',
     '                mac = $mac',
     '                adapterName = $adapterName',
-    '                isConnected = $true',
+    '                isConnected = $isConnected',
     '                bytesInPerSec = $bytesInPerSec',
     '                bytesOutPerSec = $bytesOutPerSec',
     '            }',
+    '            wifiDiagnostics = $wifiDiagnostics',
     '            uptimeSeconds = $uptimeSeconds',
     '            lastBootTime = $lastBootStr',
     '            processes = $topProcesses',
     '            remoteAccess = $remoteAccess',
+    '            agentVersion = "2.5.0-ps1"',
+    '            agentCapabilities = @("wifi_diagnostics", "network_diagnostic_commands")',
+    '            commandResults = $pendingCommandResults',
     '        }',
     '',
     '        $headers = @{',
@@ -651,6 +865,9 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '',
     '        $bodyJson = $telemetryPayload | ConvertTo-Json -Depth 6',
     '        $res = Invoke-RestMethod -Uri "$ServerUrl/api/agent/telemetry" -Method Post -Headers $headers -Body $bodyJson -TimeoutSec 10',
+    '        if ($res.heartbeatIntervalSec -and [int]$res.heartbeatIntervalSec -ge 2) { $IntervalSeconds = [int]$res.heartbeatIntervalSec }',
+    '        if ($res.networkDiagnosticIntervalSec -and [int]$res.networkDiagnosticIntervalSec -ge 10) { $NetworkDiagnosticIntervalSeconds = [int]$res.networkDiagnosticIntervalSec }',
+    '        $pendingCommandResults = @()',
     '        $commandResponse = Invoke-RestMethod -Uri "$ServerUrl/api/agent/commands?deviceId=$DeviceId" -Method Get -Headers $headers -TimeoutSec 10',
     '        if ($commandResponse.command -and $commandResponse.command.type -eq "safe_shutdown") {',
     '            $message = "IT safety shutdown requested. This computer will turn off in 60 seconds. To cancel locally, run: shutdown /a"',
@@ -666,6 +883,11 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '                powercfg /setactive SCHEME_BALANCED',
     '                Write-Host "[POWER] Balanced profile applied." -ForegroundColor Green',
     '            }',
+    '        }',
+    '        if ($commandResponse.command -and $commandResponse.command.type -eq "run_network_diagnostic") {',
+    '            $forceNetworkDiagnostic = $true',
+    '            $pendingCommandResults += @{ id = $commandResponse.command.id; type = "run_network_diagnostic"; scope = $commandResponse.command.scope; status = "completed"; requestedAt = $commandResponse.command.requestedAt }',
+    '            Write-Host "[NETWORK] On-demand network diagnostic requested; collecting real probes on the next telemetry cycle." -ForegroundColor Cyan',
     '        }',
     '        $consecutiveErrors = 0',
     '        Write-Host "[$(Get-Date -Format \'HH:mm:ss\')] Telemetry SENT -> CPU: $cpuPct% | RAM: $ramPct% | IP: $ip" -ForegroundColor Green',
