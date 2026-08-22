@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole } from '../types/index';
+import { User } from '../types/index';
 
 interface AuthContextType {
   user: User | null;
@@ -7,7 +7,6 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  switchDemoRole: (role: UserRole) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,6 +18,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     fetchCurrentUser();
+  }, []);
+
+  // All console APIs are authenticated.  Keeping this at the boundary prevents
+  // individual screens from accidentally making an anonymous protected call.
+  useEffect(() => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const isConsoleApi = url.startsWith('/api/') && !url.startsWith('/api/auth/') && !url.startsWith('/api/agent/');
+      if (!isConsoleApi) return nativeFetch(input, init);
+      const activeToken = localStorage.getItem('sys_auth_token');
+      const headers = new Headers(init.headers || {});
+      if (activeToken && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${activeToken}`);
+      return nativeFetch(input, { ...init, headers });
+    };
+    return () => { window.fetch = nativeFetch; };
   }, []);
 
   const fetchCurrentUser = async () => {
@@ -88,30 +103,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const switchDemoRole = async (role: UserRole) => {
-    const roleNames: Record<UserRole, string> = {
-      super_admin: 'IT Chief Administrator',
-      it_admin: 'Network & Lab Administrator',
-      technician: 'Hardware Support Specialist',
-      department_head: 'Dr. Sarah Connor (Computer Science Head)',
-      viewer: 'Staff Inspector'
-    };
-
-    const updatedUser: User = {
-      id: `user-${role}-01`,
-      username: role,
-      email: `${role}@system.local`,
-      fullName: roleNames[role] || 'System User',
-      role,
-      departmentId: role === 'department_head' ? 'dept-cs-01' : undefined,
-      createdAt: new Date().toISOString()
-    };
-
-    setUser(updatedUser);
-  };
-
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, switchDemoRole }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { db, hashPassword } from '../db';
 import crypto from 'crypto';
+import { UserRole } from '../../src/types/index';
 
 const router = Router();
 
@@ -28,6 +29,17 @@ export function requireSession(req: Request, res: Response, next: NextFunction) 
   if (!user) return res.status(401).json({ error: 'Authentication is required.' });
   res.locals.user = user;
   next();
+}
+
+/** Server-side authorization. UI visibility is never treated as access control. */
+export function requireRoles(...roles: UserRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = res.locals.user;
+    if (!user || !roles.includes(user.role)) {
+      return res.status(403).json({ error: 'Your role is not permitted to perform this action.' });
+    }
+    next();
+  };
 }
 
 router.post('/login', (req, res) => {

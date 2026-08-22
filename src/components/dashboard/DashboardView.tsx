@@ -13,7 +13,6 @@ import {
   Clock, 
   Plus, 
   Download, 
-  FlaskConical, 
   ExternalLink,
   ChevronRight,
   CheckCircle2
@@ -31,7 +30,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectDevice }) 
     devices, 
     setIsAddModalOpen, 
     setIsInstallModalOpen, 
-    setIsDevTestingModalOpen,
     setActiveTab 
   } = useMonitoring();
 
@@ -50,19 +48,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectDevice }) 
           <p className="text-xs text-slate-500">
             Real-time monitoring, automated anomaly diagnostics, and lifecycle incident management.
           </p>
+          <p className="text-[11px] font-semibold text-slate-600 mt-1">
+            Environment health: <span className="text-indigo-700">{summary?.overallHealthScore ?? 'Unavailable'}{summary?.overallHealthScore !== null && summary?.overallHealthScore !== undefined ? '/100' : ''}</span>
+            <span className="font-normal text-slate-400"> · calculated only from received telemetry</span>
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Emulator Button */}
-          <button
-            id="dash-emulator-btn"
-            onClick={() => setIsDevTestingModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 transition-colors shadow-xs"
-          >
-            <FlaskConical className="w-3.5 h-3.5 text-amber-600" />
-            <span>Test Emulator</span>
-          </button>
-
           {/* Agent Setup Guide */}
           <button
             onClick={() => setIsInstallModalOpen(true)}

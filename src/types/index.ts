@@ -95,20 +95,20 @@ export interface ProcessItem {
 
 export interface HardwareSpecs {
   deviceId: string;
-  cpuModel: string;
-  cpuCores: number;
-  cpuLogicalCores: number;
+  cpuModel?: string;
+  cpuCores?: number;
+  cpuLogicalCores?: number;
   cpuBaseSpeedGhz?: number;
-  ramTotalBytes: number;
+  ramTotalBytes?: number;
   ramType?: string;
   storageDevices: StorageDevice[];
   gpuModel?: string;
   gpuMemoryBytes?: number;
   motherboard?: string;
   biosVersion?: string;
-  systemArchitecture: string;
-  osVersion: string;
-  osBuild: string;
+  systemArchitecture?: string;
+  osVersion?: string;
+  osBuild?: string;
   lastUpdated: string;
 }
 
@@ -170,6 +170,13 @@ export interface Device {
   latestTelemetry?: TelemetryPayload;
   activeIssueCount?: number;
   openTicketCount?: number;
+  health?: {
+    score: number | null;
+    level: 'Excellent' | 'Good' | 'Attention Required' | 'Warning' | 'Critical' | 'Unavailable';
+    reasons: string[];
+    recommendations: string[];
+    calculatedAt: string;
+  };
 }
 
 export type Severity = 'Informational' | 'Low' | 'Medium' | 'High' | 'Critical';
@@ -276,6 +283,9 @@ export interface RepairTicket {
   resolvedDate?: string;
   closedDate?: string;
   resolution?: string;
+  verificationStatus?: 'Pending' | 'Passed' | 'Failed';
+  verifiedAt?: string;
+  verifiedBy?: string;
   notes: TicketNote[];
   attachments: TicketAttachment[];
   createdAt: string;
@@ -344,6 +354,7 @@ export interface SystemSettings {
 }
 
 export interface DashboardSummary {
+  overallHealthScore?: number | null;
   totalDevices: number;
   onlineDevices: number;
   offlineDevices: number;

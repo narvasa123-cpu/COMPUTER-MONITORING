@@ -30,39 +30,14 @@ router.post('/register', (req, res) => {
 
   const data = db.get();
   const cleanCode = String(registrationCode).trim().toUpperCase();
-  let device = data.devices.find(d => d.registrationCode && d.registrationCode.toUpperCase() === cleanCode);
+  const device = data.devices.find(d => d.registrationCode && d.registrationCode.toUpperCase() === cleanCode);
 
   const now = new Date().toISOString();
 
   if (!device) {
-    // Auto-provision a new device record for this computer
-    const newDeviceId = `dev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const assetId = `PC-${Math.floor(1000 + Math.random() * 9000)}`;
-    const deviceToken = `tok_${Math.random().toString(36).slice(2)}${Date.now()}`;
-
-    device = {
-      id: newDeviceId,
-      assetId,
-      deviceName: computerName,
-      deviceType: (rawSpecs.isLaptop || rawSpecs.chassisType === 'Laptop') ? 'Laptop' : 'Desktop',
-      operatingSystem: rawSpecs.osName || rawSpecs.osVersion || 'Windows 11 Pro 64-bit',
-      manufacturer: rawSpecs.motherboard?.split(' ')[0] || 'System OEM',
-      model: rawSpecs.motherboard || 'Standard Motherboard',
-      serialNumber: rawSpecs.serialNumber || `SN-${cleanCode}`,
-      departmentId: data.departments[0]?.id || 'dept-cs',
-      locationId: data.locations[0]?.id || 'loc-lab-101',
-      assignedUser: 'Unassigned',
-      notes: 'Automatically provisioned by PC Monitoring Agent',
-      status: 'Online',
-      connectionState: 'connected',
-      registrationCode: cleanCode,
-      deviceToken,
-      registeredAt: now,
-      lastHeartbeatAt: now,
-      lastOnlineAt: now,
-      activeIssueCount: 0
-    };
-    data.devices.unshift(device);
+    // A pairing code can only be issued from the authenticated inventory flow.
+    // This prevents an arbitrary host from creating an unmanaged asset record.
+    return res.status(401).json({ success: false, error: 'Invalid, expired, or already-used registration code.' });
   } else {
     // Update existing device record
     device.deviceName = computerName || device.deviceName;
@@ -83,23 +58,26 @@ router.post('/register', (req, res) => {
   // Store hardware specs
   const fullSpecs: HardwareSpecs = {
     deviceId: device.id,
-    cpuModel: rawSpecs.cpuModel || 'Multi-Core Processor',
-    cpuCores: Number(rawSpecs.cpuCores) || 4,
-    cpuLogicalCores: Number(rawSpecs.cpuLogicalProcessors || rawSpecs.cpuLogicalCores) || 4,
-    cpuBaseSpeedGhz: Number(rawSpecs.cpuBaseSpeedGhz) || 2.8,
-    ramTotalBytes: Number(rawSpecs.totalRamBytes || rawSpecs.ramTotalBytes) || 16 * (1024 ** 3),
-    ramType: rawSpecs.ramType || 'DDR4 / DDR5',
+    cpuModel: rawSpecs.cpuModel,
+    cpuCores: rawSpecs.cpuCores ? Number(rawSpecs.cpuCores) : undefined,
+    cpuLogicalCores: rawSpecs.cpuLogicalProcessors || rawSpecs.cpuLogicalCores ? Number(rawSpecs.cpuLogicalProcessors || rawSpecs.cpuLogicalCores) : undefined,
+    cpuBaseSpeedGhz: rawSpecs.cpuBaseSpeedGhz ? Number(rawSpecs.cpuBaseSpeedGhz) : undefined,
+    ramTotalBytes: rawSpecs.totalRamBytes || rawSpecs.ramTotalBytes ? Number(rawSpecs.totalRamBytes || rawSpecs.ramTotalBytes) : undefined,
+    ramType: rawSpecs.ramType,
     storageDevices: rawSpecs.storageDevices || rawSpecs.storage || [],
-    gpuModel: rawSpecs.gpuModel || 'Integrated Graphics Display Adapter',
-    gpuMemoryBytes: rawSpecs.gpuMemoryBytes || 0,
-    motherboard: rawSpecs.motherboard || 'OEM Motherboard',
-    biosVersion: rawSpecs.biosVersion || '1.0.0',
-    systemArchitecture: rawSpecs.osArchitecture || rawSpecs.systemArchitecture || '64-bit',
-    osVersion: rawSpecs.osVersion || rawSpecs.osName || device.operatingSystem,
-    osBuild: String(rawSpecs.osBuild || '22631'),
+    gpuModel: rawSpecs.gpuModel,
+    gpuMemoryBytes: rawSpecs.gpuMemoryBytes ? Number(rawSpecs.gpuMemoryBytes) : undefined,
+    motherboard: rawSpecs.motherboard,
+    biosVersion: rawSpecs.biosVersion,
+    systemArchitecture: rawSpecs.osArchitecture || rawSpecs.systemArchitecture,
+    osVersion: rawSpecs.osVersion || rawSpecs.osName,
+    osBuild: rawSpecs.osBuild ? String(rawSpecs.osBuild) : undefined,
     lastUpdated: now
   };
   data.hardwareSpecs[device.id] = fullSpecs;
+  // Pairing material is single-use. The device token is now the only credential
+  // accepted for heartbeats and telemetry.
+  device.registrationCode = '';
 
   db.scheduleSave();
 
@@ -138,7 +116,7 @@ router.post('/heartbeat', (req, res) => {
   const deviceId = req.body.deviceId;
 
   const data = db.get();
-  const device = data.devices.find(d => (token && d.deviceToken === token) || (deviceId && d.id === deviceId));
+  const device = data.devices.find(d => token && d.deviceToken === token && (!deviceId || d.id === deviceId));
 
   if (!device) {
     return res.status(401).json({ success: false, error: 'Unauthorized device token.' });
@@ -165,7 +143,7 @@ router.post('/telemetry', (req, res) => {
   const telemetry: TelemetryPayload = req.body;
 
   const data = db.get();
-  const device = data.devices.find(d => (token && d.deviceToken === token) || (telemetry.deviceId && d.id === telemetry.deviceId));
+  const device = data.devices.find(d => token && d.deviceToken === token && (!telemetry.deviceId || d.id === telemetry.deviceId));
 
   if (!device) {
     return res.status(401).json({ success: false, error: 'Unauthorized device token or device ID.' });
@@ -254,7 +232,10 @@ router.get('/download/:type', (req, res) => {
   return res.status(400).json({ error: 'Supported types: powershell, python, node' });
 });
 
-// 5. POST /api/agent/emulator/send (Development & Testing mode runner)
+/* Development telemetry injection is deliberately unavailable in this
+   production console. Use a separately deployed test environment and clearly
+   labelled fixtures; production telemetry is accepted only from an agent. */
+/*
 router.post('/emulator/send', requireSession, (req, res) => {
   const { deviceId, cpuUsage, ramUsage, diskFreePercent, cpuTemp, isCharging, batteryPercent, simulateOffline } = req.body;
 
@@ -374,5 +355,6 @@ router.post('/emulator/send', requireSession, (req, res) => {
     telemetry
   });
 });
+*/
 
 export default router;

@@ -3,6 +3,7 @@ import { db } from '../db';
 import { DiagnosticEngine } from '../diagnostic-engine';
 import { Device, HardwareSpecs } from '../../src/types/index';
 import crypto from 'crypto';
+import { calculateDeviceHealth } from '../health';
 
 const router = Router();
 
@@ -23,12 +24,14 @@ router.get('/', (req, res) => {
     const activeIssues = data.diagnosticIssues.filter(i => i.deviceId === device.id && i.status === 'Active');
     const openTickets = data.repairTickets.filter(t => t.deviceId === device.id && (t.status === 'Open' || t.status === 'Assigned' || t.status === 'Diagnosing' || t.status === 'In Repair'));
 
+    const maintenance = data.maintenanceRecords.filter(m => m.deviceId === device.id);
     return {
       ...device,
       specs,
       latestTelemetry,
       activeIssueCount: activeIssues.length,
       openTicketCount: openTickets.length
+      ,health: calculateDeviceHealth(device, latestTelemetry, data.diagnosticIssues.filter(i => i.deviceId === device.id), maintenance)
     };
   });
 
@@ -97,6 +100,7 @@ router.get('/:id', (req, res) => {
     maintenance,
     location,
     department
+    ,health: calculateDeviceHealth(device, latestTelemetry, issues, maintenance)
   });
 });
 

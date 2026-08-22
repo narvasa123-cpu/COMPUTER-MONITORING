@@ -132,6 +132,10 @@ router.put('/:id', (req, res) => {
 
   const prevStatus = ticket.status;
 
+  if (status === 'Closed' && ticket.verificationStatus !== 'Passed') {
+    return res.status(409).json({ error: 'Post-repair verification must pass before this ticket can be closed.' });
+  }
+
   if (status) ticket.status = status;
   if (priority) ticket.priority = priority;
   if (severity) ticket.severity = severity;
@@ -212,6 +216,62 @@ router.post('/:id/notes', (req, res) => {
   return res.status(201).json(ticket);
 });
 
+// Resolve a ticket without bypassing the record trail. Closing remains a
+// separate action so a supervisor can verify post-repair diagnostics first.
+router.post('/:id/resolve', (req, res) => {
+  const data = db.get();
+  const ticket = data.repairTickets.find(t => t.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Ticket not found.' });
+  const { resolution, createMaintenanceRecord, actionPerformed, partsReplaced } = req.body;
+  if (!resolution || !String(resolution).trim()) return res.status(400).json({ error: 'Resolution notes are required.' });
+  const now = new Date().toISOString();
+  ticket.status = 'Resolved';
+  ticket.resolution = String(resolution).trim();
+  ticket.resolvedDate = now;
+  ticket.verificationStatus = 'Pending';
+  ticket.updatedAt = now;
+  if (ticket.issueId) {
+    const issue = data.diagnosticIssues.find(i => i.id === ticket.issueId);
+    if (issue) { issue.status = 'Resolved'; issue.resolvedAt = now; }
+  }
+  let maintenance: MaintenanceRecord | undefined;
+  if (createMaintenanceRecord) {
+    const recordNumber = `MNT-${new Date().getFullYear()}-${String(data.maintenanceRecords.length + 1).padStart(4, '0')}`;
+    maintenance = {
+      id: `mnt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      recordNumber, deviceId: ticket.deviceId, deviceName: ticket.deviceName, assetId: ticket.assetId,
+      ticketId: ticket.id, ticketNumber: ticket.ticketNumber, date: now,
+      technicianId: ticket.assignedTechnicianId || res.locals.user.id,
+      technicianName: ticket.assignedTechnicianName || res.locals.user.fullName,
+      problem: ticket.title, diagnosis: ticket.description, actionPerformed: actionPerformed || resolution,
+      partsReplaced: partsReplaced || '', softwareInstalled: '', result: 'Resolved', notes: resolution, createdAt: now
+    };
+    data.maintenanceRecords.unshift(maintenance);
+  }
+  const device = data.devices.find(d => d.id === ticket.deviceId);
+  if (device) DiagnosticEngine.recalculateDeviceStatus(device);
+  db.addAuditLog(res.locals.user.id, res.locals.user.fullName, res.locals.user.role, 'TICKET_RESOLVED', 'Ticket', ticket.id, `Resolved ${ticket.ticketNumber}${maintenance ? ` and created ${maintenance.recordNumber}` : ''}.`);
+  db.scheduleSave();
+  return res.json({ ticket, maintenance, requiresVerification: true });
+});
+
+router.post('/:id/verify', (req, res) => {
+  const data = db.get();
+  const ticket = data.repairTickets.find(t => t.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Ticket not found.' });
+  if (ticket.status !== 'Resolved') return res.status(409).json({ error: 'Only a resolved ticket can be verified.' });
+  const { passed, evidence } = req.body;
+  if (passed !== true || !evidence || !String(evidence).trim()) return res.status(400).json({ error: 'A passed verification and diagnostic evidence are required.' });
+  ticket.verificationStatus = 'Passed';
+  ticket.verifiedAt = new Date().toISOString();
+  ticket.verifiedBy = res.locals.user.fullName;
+  ticket.notes.push({ id: `note-${Date.now()}`, userId: res.locals.user.id, userName: res.locals.user.fullName, userRole: res.locals.user.role, text: `Post-repair verification passed: ${String(evidence).trim()}`, createdAt: ticket.verifiedAt });
+  ticket.updatedAt = ticket.verifiedAt;
+  db.addAuditLog(res.locals.user.id, res.locals.user.fullName, res.locals.user.role, 'REPAIR_VERIFIED', 'Ticket', ticket.id, `Post-repair verification passed for ${ticket.ticketNumber}.`);
+  db.scheduleSave();
+  return res.json(ticket);
+});
+
 // POST resolve ticket and log maintenance in one unified step
 router.post('/:id/resolve-and-log', (req, res) => {
   const data = db.get();
@@ -233,6 +293,7 @@ router.post('/:id/resolve-and-log', (req, res) => {
   const now = new Date().toISOString();
   ticket.status = 'Resolved';
   ticket.resolvedDate = now;
+  ticket.verificationStatus = 'Pending';
   ticket.resolution = actionPerformed || 'Maintenance completed successfully.';
   ticket.updatedAt = now;
 

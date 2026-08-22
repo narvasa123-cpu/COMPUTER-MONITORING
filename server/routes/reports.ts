@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db';
 import { DashboardSummary } from '../../src/types/index';
+import { calculateDeviceHealth } from '../health';
 
 const router = Router();
 
@@ -9,6 +10,7 @@ router.get('/summary', (req, res) => {
   const devices = data.devices;
   const issues = data.diagnosticIssues.filter(i => i.status === 'Active');
   const tickets = data.repairTickets;
+  const scoredDevices = devices.map(device => calculateDeviceHealth(device, data.latestTelemetry[device.id], data.diagnosticIssues.filter(i => i.deviceId === device.id), data.maintenanceRecords.filter(m => m.deviceId === device.id)).score).filter((score): score is number => score !== null);
 
   let online = 0;
   let offline = 0;
@@ -43,6 +45,7 @@ router.get('/summary', (req, res) => {
   const resolvedTickets = tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
 
   const summary: DashboardSummary = {
+    overallHealthScore: scoredDevices.length ? Math.round(scoredDevices.reduce((sum, score) => sum + score, 0) / scoredDevices.length) : null,
     totalDevices: devices.length,
     onlineDevices: online,
     offlineDevices: offline,

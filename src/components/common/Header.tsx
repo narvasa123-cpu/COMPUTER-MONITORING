@@ -4,17 +4,11 @@ import {
   Bell, 
   RefreshCw, 
   Plus, 
-  FlaskConical, 
-  Check, 
-  ShieldCheck, 
-  UserCheck, 
-  AlertTriangle,
   ChevronDown,
   LogOut
 } from 'lucide-react';
 import { useMonitoring } from '../../context/MonitoringContext';
 import { useAuth } from '../../context/AuthContext';
-import { UserRole } from '../../types/index';
 
 export const Header: React.FC = () => {
   const { 
@@ -27,12 +21,11 @@ export const Header: React.FC = () => {
     markAllNotificationsRead,
     markNotificationRead,
     setIsAddModalOpen,
-    setIsDevTestingModalOpen,
     setActiveTab,
     setSelectedDeviceId
   } = useMonitoring();
 
-  const { user, switchDemoRole, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,14 +35,6 @@ export const Header: React.FC = () => {
     await refreshData();
     setTimeout(() => setRefreshing(false), 400);
   };
-
-  const roles: { role: UserRole; label: string; desc: string }[] = [
-    { role: 'super_admin', label: 'Super Admin', desc: 'Full administrative access' },
-    { role: 'it_admin', label: 'IT Administrator', desc: 'Manage devices, rules, tickets' },
-    { role: 'technician', label: 'Technician', desc: 'Diagnostics, repairs, logs' },
-    { role: 'department_head', label: 'Department Head', desc: 'Department asset overview' },
-    { role: 'viewer', label: 'Viewer', desc: 'Read-only inspection' }
-  ];
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
@@ -98,17 +83,6 @@ export const Header: React.FC = () => {
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
             </button>
           </div>
-
-          {/* Test Agent Emulator Button */}
-          <button
-            id="open-emulator-btn"
-            onClick={() => setIsDevTestingModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 transition-colors shadow-xs"
-            title="Open isolated Development/Testing Agent Telemetry Generator"
-          >
-            <FlaskConical className="w-3.5 h-3.5 text-amber-600" />
-            <span className="hidden sm:inline">Test Emulator</span>
-          </button>
 
           {/* Register New PC */}
           <button
@@ -220,26 +194,8 @@ export const Header: React.FC = () => {
             {showRoleMenu && (
               <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-3 py-2 border-b border-slate-100">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Role Simulation</p>
-                  <p className="text-xs text-slate-600">Switch current operator profile:</p>
-                </div>
-                <div className="py-1">
-                  {roles.map(r => (
-                    <button
-                      key={r.role}
-                      onClick={() => {
-                        switchDemoRole(r.role);
-                        setShowRoleMenu(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors ${user?.role === r.role ? 'bg-indigo-50 font-bold text-indigo-700' : 'text-slate-700'}`}
-                    >
-                      <div>
-                        <p>{r.label}</p>
-                        <p className="text-[10px] text-slate-400 font-normal">{r.desc}</p>
-                      </div>
-                      {user?.role === r.role && <Check className="w-3.5 h-3.5 text-indigo-600" />}
-                    </button>
-                  ))}
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Signed in account</p>
+                  <p className="text-xs text-slate-600">Permissions are enforced by the server.</p>
                 </div>
                 <div className="border-t border-slate-100 pt-1">
                   <button

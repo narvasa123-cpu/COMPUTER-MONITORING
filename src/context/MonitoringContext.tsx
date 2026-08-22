@@ -28,8 +28,6 @@ interface MonitoringContextType {
   setIsInstallModalOpen: (open: boolean) => void;
   installTargetDevice: Device | null;
   setInstallTargetDevice: (device: Device | null) => void;
-  isDevTestingModalOpen: boolean;
-  setIsDevTestingModalOpen: (open: boolean) => void;
   isRulesModalOpen: boolean;
   setIsRulesModalOpen: (open: boolean) => void;
 }
@@ -52,7 +50,6 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
   const [installTargetDevice, setInstallTargetDevice] = useState<Device | null>(null);
-  const [isDevTestingModalOpen, setIsDevTestingModalOpen] = useState<boolean>(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState<boolean>(false);
 
   const refreshData = useCallback(async () => {
@@ -144,8 +141,6 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsInstallModalOpen,
       installTargetDevice,
       setInstallTargetDevice,
-      isDevTestingModalOpen,
-      setIsDevTestingModalOpen,
       isRulesModalOpen,
       setIsRulesModalOpen
     }}>

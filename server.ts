@@ -4,7 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import { DiagnosticEngine } from './server/diagnostic-engine';
 
 // Import Route Handlers
-import authRoutes, { requireSession } from './server/routes/auth';
+import authRoutes, { requireSession, requireRoles } from './server/routes/auth';
 import deviceRoutes from './server/routes/devices';
 import agentRoutes from './server/routes/agent';
 import diagnosticRoutes from './server/routes/diagnostics';
@@ -38,15 +38,34 @@ async function startServer() {
 
   // API Routes
   app.use('/api/auth', authRoutes);
-  app.use('/api/devices', requireSession, deviceRoutes);
+  // Read access is authenticated for every console route. Mutations are also
+  // enforced here, independent of whether the web UI happens to show a button.
+  const controlWrite = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.method === 'GET') return next();
+    const user = res.locals.user;
+    const isAdmin = user?.role === 'super_admin' || user?.role === 'it_admin';
+    const isTechnician = user?.role === 'technician';
+    if (req.path.startsWith('/users') || req.path.startsWith('/settings') || req.path.startsWith('/org')) {
+      return isAdmin ? next() : res.status(403).json({ error: 'Administrative permission is required.' });
+    }
+    if (req.path.startsWith('/devices')) {
+      return isAdmin ? next() : res.status(403).json({ error: 'Device inventory changes require IT administrator permission.' });
+    }
+    if (req.path.startsWith('/diagnostics') || req.path.startsWith('/tickets') || req.path.startsWith('/maintenance')) {
+      return (isAdmin || isTechnician) ? next() : res.status(403).json({ error: 'Technician or administrator permission is required.' });
+    }
+    next();
+  };
+
+  app.use('/api/devices', requireSession, requireRoles('super_admin', 'it_admin', 'technician', 'department_head', 'viewer'), deviceRoutes);
   app.use('/api/agent', agentRoutes);
-  app.use('/api/diagnostics', requireSession, diagnosticRoutes);
-  app.use('/api/tickets', requireSession, ticketRoutes);
-  app.use('/api/maintenance', requireSession, maintenanceRoutes);
-  app.use('/api/org', requireSession, orgRoutes);
-  app.use('/api/users', requireSession, userRoutes);
-  app.use('/api/settings', requireSession, settingsRoutes);
-  app.use('/api/audit', requireSession, auditRoutes);
+  app.use('/api/diagnostics', requireSession, controlWrite, diagnosticRoutes);
+  app.use('/api/tickets', requireSession, controlWrite, ticketRoutes);
+  app.use('/api/maintenance', requireSession, controlWrite, maintenanceRoutes);
+  app.use('/api/org', requireSession, controlWrite, orgRoutes);
+  app.use('/api/users', requireSession, controlWrite, userRoutes);
+  app.use('/api/settings', requireSession, controlWrite, settingsRoutes);
+  app.use('/api/audit', requireSession, requireRoles('super_admin', 'it_admin'), auditRoutes);
   app.use('/api/notifications', requireSession, notificationRoutes);
   app.use('/api/reports', requireSession, reportRoutes);
 

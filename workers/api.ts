@@ -1,3 +1,5 @@
+import { generateNodeAgent, generatePowerShellAgent, generatePythonAgent } from '../server/agent-templates';
+
 interface Env {
   SUPABASE_URL: string;
   SUPABASE_SECRET_KEY: string;
@@ -67,6 +69,13 @@ function safeUser(user: Json) {
   return safe;
 }
 
+function agentDownload(type: string, serverUrl: string, registrationCode: string) {
+  if (type === 'powershell') return { body: generatePowerShellAgent(serverUrl, registrationCode), filename: 'pc-monitoring-agent.ps1', contentType: 'text/plain; charset=utf-8' };
+  if (type === 'python') return { body: generatePythonAgent(serverUrl, registrationCode), filename: 'pc-monitoring-agent.py', contentType: 'text/x-python; charset=utf-8' };
+  if (type === 'node') return { body: generateNodeAgent(serverUrl, registrationCode), filename: 'pc-monitoring-agent.mjs', contentType: 'application/javascript; charset=utf-8' };
+  return null;
+}
+
 function summary(state: Json) {
   const devices = state.devices as Json[];
   const count = (status: string) => devices.filter(device => device.status === status).length;
@@ -89,8 +98,78 @@ export default {
     const state = await load(env);
     if (path === '/api/health') return json({ status: 'ok', time: now(), runtime: 'cloudflare-workers', database: 'supabase' });
 
+    // Agent scripts and device telemetry use registration/device tokens, not dashboard sessions.
+    const downloadMatch = path.match(/^\/api\/agent\/download\/(powershell|python|node)$/);
+    if (downloadMatch && request.method === 'GET') {
+      const registrationCode = url.searchParams.get('code')?.trim().toUpperCase() || '';
+      if (!registrationCode) return json({ error: 'A registration code is required.' }, 400);
+      const script = agentDownload(downloadMatch[1], url.origin, registrationCode);
+      if (!script) return json({ error: 'Supported types: powershell, python, node' }, 400);
+      return new Response(script.body, { headers: { ...cors, 'Content-Type': script.contentType, 'Content-Disposition': `attachment; filename="${script.filename}"` } });
+    }
+
+    if (path === '/api/agent/register' && request.method === 'POST') {
+      const body = await request.json() as Json;
+      const registrationCode = String(body.registrationCode || '').trim().toUpperCase();
+      if (!registrationCode) return json({ success: false, error: 'Registration code is required.' }, 400);
+      const devices = state.devices as Json[];
+      let device = devices.find(item => String(item.registrationCode || '').toUpperCase() === registrationCode);
+      if (!device) return json({ success: false, error: 'The registration code is invalid.' }, 401);
+      const timestamp = now();
+      const deviceToken = String(device.deviceToken || `devtok_${crypto.randomUUID().replaceAll('-', '')}`);
+      Object.assign(device, {
+        deviceName: body.computerName || body.hostname || device.deviceName,
+        deviceToken, status: 'Online', connectionState: 'connected',
+        lastHeartbeatAt: timestamp, lastOnlineAt: timestamp, offlineSince: undefined,
+        operatingSystem: body.osName || body.osVersion || device.operatingSystem
+      });
+      await save(env, state);
+      return json({ success: true, token: deviceToken, deviceToken, deviceId: device.id, heartbeatIntervalSec: 10, message: 'Device successfully registered and active.' });
+    }
+
+    if ((path === '/api/agent/heartbeat' || path === '/api/agent/telemetry') && request.method === 'POST') {
+      const body = await request.json() as Json;
+      const deviceToken = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || String(body.deviceToken || '');
+      const device = (state.devices as Json[]).find(item => item.deviceToken === deviceToken || (body.deviceId && item.id === body.deviceId));
+      if (!device) return json({ success: false, error: 'Unauthorized device token.' }, 401);
+      const timestamp = String(body.timestamp || now());
+      Object.assign(device, { status: 'Online', connectionState: 'connected', lastHeartbeatAt: timestamp, lastOnlineAt: timestamp, offlineSince: undefined });
+      if (path.endsWith('/telemetry')) {
+        const telemetry = (state.telemetry as Record<string, Json>) || {};
+        const latestTelemetry: Json = { ...body, deviceId: device.id, timestamp };
+        telemetry[String(device.id)] = latestTelemetry;
+        // The dashboard reads the current snapshot from each device record.
+        device.latestTelemetry = latestTelemetry;
+        state.telemetry = telemetry;
+        if (body.network && typeof body.network === 'object') {
+          const network = body.network as Json;
+          device.ipAddress = network.ip || device.ipAddress;
+          device.macAddress = network.mac || device.macAddress;
+        }
+      }
+      await save(env, state);
+      return json({ success: true, timestamp, status: device.status, activeIssues: Number(device.activeIssueCount || 0) });
+    }
+
+    if (path === '/api/agent/commands' && request.method === 'GET') {
+      const deviceId = url.searchParams.get('deviceId');
+      const deviceToken = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+      const device = (state.devices as Json[]).find(item => item.id === deviceId && item.deviceToken === deviceToken);
+      if (!device) return json({ error: 'Unauthorized device token.' }, 401);
+      const commands = [
+        ...((state.shutdownCommands as Json[] | undefined) || []),
+        ...((state.deviceCommands as Json[] | undefined) || [])
+      ];
+      const command = commands.find(item => item.deviceId === deviceId && item.status === 'queued' && Number(item.expiresAt || 0) > Date.now());
+      if (!command) return json({ command: null });
+      command.status = 'dispatched';
+      command.dispatchedAt = now();
+      await save(env, state);
+      return json({ command });
+    }
+
     if (path === '/api/auth/login' && request.method === 'POST') {
-      const body = await request.json<Json>();
+      const body = await request.json() as Json;
       const account = (state.users as Json[]).find(user => user.username === body.username || user.email === body.username);
       if (!account || account.passwordHash !== await hash(String(body.password || ''))) return json({ error: 'Invalid username or password.' }, 401);
       const sessionToken = `sess_${crypto.randomUUID().replaceAll('-', '')}`;
@@ -109,12 +188,62 @@ export default {
 
     if (path === '/api/reports/summary' && request.method === 'GET') return json(summary(state));
     if (path === '/api/devices' && request.method === 'GET') return json(state.devices);
+    const deviceMatch = path.match(/^\/api\/devices\/([^/]+)$/);
+    if (deviceMatch && request.method === 'GET') {
+      const device = (state.devices as Json[]).find(item => item.id === deviceMatch[1]);
+      return device ? json(device) : json({ error: 'Device not found.' }, 404);
+    }
+    if (deviceMatch && request.method === 'DELETE') {
+      const devices = state.devices as Json[];
+      const index = devices.findIndex(item => item.id === deviceMatch[1]);
+      if (index < 0) return json({ error: 'Device not found.' }, 404);
+      const [deleted] = devices.splice(index, 1);
+      const telemetry = state.telemetry as Record<string, Json> | undefined;
+      if (telemetry) delete telemetry[String(deleted.id)];
+      await save(env, state);
+      return json({ success: true, deletedDeviceId: deleted.id });
+    }
+    const shutdownMatch = path.match(/^\/api\/devices\/([^/]+)\/shutdown$/);
+    if (shutdownMatch && request.method === 'POST') {
+      if (user.role !== 'super_admin') return json({ error: 'Only a super administrator can request a shutdown.' }, 403);
+      const device = (state.devices as Json[]).find(item => item.id === shutdownMatch[1]);
+      if (!device) return json({ error: 'Device not found.' }, 404);
+      const body = await request.json().catch(() => ({})) as Json;
+      const commands = (state.shutdownCommands as Json[] | undefined) || [];
+      const command: Json = {
+        id: id('shutdown'), type: 'safe_shutdown', deviceId: device.id, deviceName: device.deviceName,
+        reason: String(body.reason || 'Building safety shutdown requested by IT.'), requestedBy: user.id,
+        requestedAt: now(), expiresAt: Date.now() + 5 * 60 * 1000, status: 'queued'
+      };
+      commands.unshift(command);
+      state.shutdownCommands = commands.slice(0, 100);
+      await save(env, state);
+      return json({ success: true, command });
+    }
+    const powerProfileMatch = path.match(/^\/api\/devices\/([^/]+)\/power-profile$/);
+    if (powerProfileMatch && request.method === 'POST') {
+      if (user.role !== 'super_admin' && user.role !== 'it_admin') return json({ error: 'Only an administrator can change a power profile.' }, 403);
+      const device = (state.devices as Json[]).find(item => item.id === powerProfileMatch[1]);
+      if (!device) return json({ error: 'Device not found.' }, 404);
+      const body = await request.json().catch(() => ({})) as Json;
+      const profile = body.profile === 'high_performance' ? 'high_performance' : body.profile === 'balanced' ? 'balanced' : null;
+      if (!profile) return json({ error: 'Choose balanced or high_performance.' }, 400);
+      const commands = (state.deviceCommands as Json[] | undefined) || [];
+      const command: Json = {
+        id: id('power'), type: 'power_profile', profile, deviceId: device.id, deviceName: device.deviceName,
+        requestedBy: user.id, requestedAt: now(), expiresAt: Date.now() + 5 * 60 * 1000, status: 'queued'
+      };
+      commands.unshift(command);
+      state.deviceCommands = commands.slice(0, 100);
+      await save(env, state);
+      return json({ success: true, command });
+    }
     if (path === '/api/devices' && request.method === 'POST') {
-      const body = await request.json<Json>();
+      const body = await request.json() as Json;
       if (!body.deviceName || !body.assetId) return json({ error: 'Device name and Asset ID are required.' }, 400);
       const devices = state.devices as Json[];
       if (devices.some(device => String(device.assetId).toLowerCase() === String(body.assetId).toLowerCase())) return json({ error: 'Asset ID is already registered.' }, 409);
-      const device = { ...body, id: id('dev'), registrationCode: `REG-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, deviceToken: `devtok_${crypto.randomUUID().replaceAll('-', '')}`, deviceType: body.deviceType || 'Desktop', assignedUser: body.assignedUser || 'Unassigned', status: 'Waiting for Agent Connection', connectionState: 'never_connected', registeredAt: now() };
+      const device: Json = { ...body, id: id('dev'), registrationCode: `REG-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, deviceToken: `devtok_${crypto.randomUUID().replaceAll('-', '')}`, deviceType: body.deviceType || 'Desktop', assignedUser: body.assignedUser || 'Unassigned', status: 'Waiting for Agent Connection', connectionState: 'never_connected', registeredAt: now() };
       devices.unshift(device); (state.notifications as Json[]).unshift({ id: id('notif'), title: `Device Added: ${device.deviceName}`, message: 'Install the monitoring agent to start telemetry.', type: 'info', deviceId: device.id, deviceName: device.deviceName, isRead: false, createdAt: now() });
       await save(env, state); return json(device, 201);
     }

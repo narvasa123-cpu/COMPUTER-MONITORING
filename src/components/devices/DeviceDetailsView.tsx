@@ -46,8 +46,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
     devices, 
     refreshData, 
     setIsInstallModalOpen, 
-    setInstallTargetDevice,
-    setIsDevTestingModalOpen 
+    setInstallTargetDevice
   } = useMonitoring();
   const { user } = useAuth();
 
@@ -107,6 +106,50 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
     if (!bytes) return '0 GB';
     return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
   };
+
+  /* const handleSafeShutdown = async () => {
+    if (!device || !confirm(`Request a safety shutdown for ${device.deviceName}? The computer will show a 60-second warning and its local user can cancel with shutdown /a.`)) return;
+    setShutdownPending(true);
+    try {
+      const res = await fetch(`/api/devices/${device.id}/shutdown`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Building safety shutdown requested by IT.' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to request shutdown.');
+      alert('Safety shutdown queued. The connected agent will show a 60-second warning before powering off.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Unable to request shutdown.');
+    } finally {
+      setShutdownPending(false);
+    }
+  };
+
+  const handlePowerProfile = async (profile: 'balanced' | 'high_performance') => {
+    if (!device) return;
+    const label = profile === 'high_performance' ? 'High Performance' : 'Balanced';
+    if (!confirm(`Apply the ${label} power profile to ${device.deviceName}? High Performance can increase heat and battery use.`)) return;
+    try {
+      const res = await fetch(`/api/devices/${device.id}/power-profile`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to update the power profile.');
+      alert(`${label} profile queued. The connected agent will apply it within about 10 seconds.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Unable to update the power profile.');
+    }
+  }; */
+
+  // Remote power commands are intentionally not exposed until the agent has a
+  // signed command channel and acknowledgement protocol. The associated UI is
+  // disabled below rather than pretending a browser action reaches a device.
+  const shutdownPending = false;
+  const handleSafeShutdown = () => undefined;
+  const handlePowerProfile = (_profile: 'balanced' | 'high_performance') => undefined;
+
+  const formatNetworkRate = (bytesPerSecond?: number) =>
+    `${(((bytesPerSecond || 0) * 8) / 1_000_000).toFixed(2)} Mbps`;
 
   const formatLastHeartbeat = (iso?: string) => {
     if (!iso) return 'Never connected';
@@ -179,6 +222,25 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             </button>
           )}
 
+          {false && (
+            <button
+              onClick={handleSafeShutdown}
+              disabled={shutdownPending || device.status !== 'Online'}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+              title="Shows a 60-second local warning before shutdown"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>{shutdownPending ? 'Queuing…' : 'Safety Shutdown'}</span>
+            </button>
+          )}
+
+          {false && (
+            <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+              <button onClick={() => handlePowerProfile('balanced')} disabled={device.status !== 'Online'} className="px-2.5 py-1.5 text-slate-700 hover:bg-slate-100 disabled:opacity-50">Balanced</button>
+              <button onClick={() => handlePowerProfile('high_performance')} disabled={device.status !== 'Online'} className="px-2.5 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">High Performance</button>
+            </div>
+          )}
+
           {/* Create Repair Ticket */}
           {user?.role !== 'viewer' && (
             <button
@@ -206,6 +268,11 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
 
       {/* Overview Quick Stats Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
+        <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-xs">
+          <p className="text-[10px] text-slate-400 font-bold uppercase">Health Score</p>
+          <p className="text-xs font-bold text-indigo-700 truncate mt-0.5">{device.health?.score ?? 'Unavailable'}{device.health?.score !== null && device.health?.score !== undefined ? '/100' : ''}</p>
+          <p className="text-[10px] text-slate-500 truncate">{device.health?.level || 'Awaiting telemetry'}</p>
+        </div>
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
           <p className="text-[10px] text-slate-400 font-bold uppercase">Assigned User</p>
           <p className="text-xs font-bold text-slate-800 truncate mt-0.5">{device.assignedUser || 'Unassigned'}</p>
@@ -334,7 +401,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
       {/* Tab 1: Live Telemetry & Sensors */}
       {activeTab === 'telemetry' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
             
             {/* CPU Gauge Card */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
@@ -418,6 +485,30 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
                 <div className="flex justify-between">
                   <span>Total Capacity:</span>
                   <span className="font-semibold text-slate-700">{formatBytes(tel?.ramTotalBytes || specs?.totalRamBytes)} ({specs?.ramType || 'DDR4'})</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Wi-Fi / network throughput */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wifi className="w-4 h-4 text-indigo-600" />
+                  <h4 className="text-xs font-bold text-slate-900">Network Speed</h4>
+                </div>
+                <span className="text-xs font-extrabold text-emerald-600">Live</span>
+              </div>
+              <div className="text-[11px] text-slate-500 space-y-2 pt-1 border-t border-slate-100">
+                <div className="flex justify-between gap-2">
+                  <span>Download:</span>
+                  <span className="font-bold text-slate-800">{formatNetworkRate(tel?.network?.bytesInPerSec)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span>Upload:</span>
+                  <span className="font-bold text-slate-800">{formatNetworkRate(tel?.network?.bytesOutPerSec)}</span>
+                </div>
+                <div className="pt-1 text-[10px] truncate" title={tel?.network?.adapterName}>
+                  {tel?.network?.adapterName || 'Waiting for agent data'}
                 </div>
               </div>
             </div>

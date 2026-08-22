@@ -35,7 +35,7 @@ export const InstallAgentModal: React.FC = () => {
   const registrationCode = selectedDevice?.registrationCode || 'REG-XXXX-XXXX';
   const serverUrl = window.location.origin;
 
-  const powershellRunCommand = `powershell -ExecutionPolicy Bypass -File .\\pc-monitoring-agent.ps1`;
+  const powershellRunCommand = `powershell -ExecutionPolicy Bypass -File .\\pc-monitoring-agent.ps1 -InstallAsStartupTask`;
   const pythonRunCommand = `python agent.py`;
   const nodeRunCommand = `node agent.mjs`;
 
