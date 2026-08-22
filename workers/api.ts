@@ -238,6 +238,27 @@ export default {
       await save(env, state);
       return json({ success: true, command });
     }
+    const remoteSessionMatch = path.match(/^\/api\/devices\/([^/]+)\/remote-session$/);
+    if (remoteSessionMatch && request.method === 'POST') {
+      if (!['super_admin', 'it_admin', 'technician'].includes(String(user.role))) return json({ error: 'Remote support requires technician or administrator permission.' }, 403);
+      const device = (state.devices as Json[]).find(item => item.id === remoteSessionMatch[1]);
+      if (!device) return json({ error: 'Device not found.' }, 404);
+      if (device.connectionState !== 'connected') return json({ error: 'The device is not connected to its monitoring agent.' }, 409);
+      const body = await request.json().catch(() => ({})) as Json;
+      if (body.authorized !== true || String(body.reason || '').trim().length < 5) return json({ error: 'User authorization confirmation and a support reason are required.' }, 400);
+      const telemetry = device.latestTelemetry as Json | undefined;
+      const remote = telemetry?.remoteAccess as Json | undefined;
+      if (!remote?.enabled) return json({ error: String(remote?.reason || 'Remote Desktop is not enabled on this device. Enable it locally and ensure network/VPN access before requesting a session.') }, 409);
+      const network = telemetry?.network as Json | undefined;
+      const host = String(remote.host || network?.ip || device.ipAddress || '');
+      if (!host) return json({ error: 'The agent has not reported a reachable remote host.' }, 409);
+      const event: Json = { id: id('remote'), deviceId: device.id, deviceName: device.deviceName, requestedBy: user.id, requestedByName: user.fullName, reason: String(body.reason).trim(), requestedAt: now(), protocol: 'rdp', host };
+      const audit = (state.remoteSessions as Json[] | undefined) || [];
+      audit.unshift(event); state.remoteSessions = audit.slice(0, 200);
+      await save(env, state);
+      // ms-rd is handled by Microsoft Remote Desktop on supported technician workstations.
+      return json({ success: true, session: event, rdpUri: `ms-rd:full address=s:${encodeURIComponent(host)}`, manualCommand: `mstsc /v:${host}`, note: 'Cloudflare authorizes and audits this launch; the RDP connection still travels only over your approved LAN or VPN.' });
+    }
     if (path === '/api/devices' && request.method === 'POST') {
       const body = await request.json() as Json;
       if (!body.deviceName || !body.assetId) return json({ error: 'Device name and Asset ID are required.' }, 400);

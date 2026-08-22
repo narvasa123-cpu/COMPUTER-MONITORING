@@ -22,7 +22,8 @@ import {
   Layers,
   Terminal,
   RefreshCw,
-  Plus
+  Plus,
+  ScreenShare
 } from 'lucide-react';
 import { Device, DiagnosticIssue, RepairTicket, MaintenanceRecord } from '../../types/index';
 import { StatusBadge, SeverityBadge } from '../common/Badge';
@@ -105,6 +106,22 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   const formatBytes = (bytes?: number) => {
     if (!bytes) return '0 GB';
     return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
+  };
+
+  const handleRemoteSupport = async () => {
+    if (!device) return;
+    const reason = prompt(`Remote support for ${device.deviceName}: enter the support reason for the audit log.`);
+    if (!reason?.trim()) return;
+    if (!confirm('Confirm that you are authorized to access this computer and that the user or organization has approved remote support.')) return;
+    try {
+      const response = await fetch(`/api/devices/${device.id}/remote-session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason, authorized: true }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Remote session could not be started.');
+      window.location.href = result.rdpUri;
+      setTimeout(() => alert(`If Remote Desktop did not open, run: ${result.manualCommand}\n\n${result.note}`), 700);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Remote session could not be started.');
+    }
   };
 
   /* const handleSafeShutdown = async () => {
@@ -210,6 +227,18 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             <Download className="w-3.5 h-3.5" />
             <span>Agent Setup ({device.registrationCode})</span>
           </button>
+
+          {(user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician') && (
+            <button
+              onClick={handleRemoteSupport}
+              disabled={device.connectionState !== 'connected'}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 transition-colors"
+              title="Launch Microsoft Remote Desktop after an authorized, audited request"
+            >
+              <ScreenShare className="w-3.5 h-3.5" />
+              <span>Remote Support</span>
+            </button>
+          )}
 
           {/* Log Maintenance */}
           {user?.role !== 'viewer' && (
