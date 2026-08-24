@@ -16,7 +16,7 @@ function sanitizeServerUrl(url: string): string {
  * manifest. The dashboard only treats an update as verified after a later
  * authenticated telemetry upload reports this exact version and capabilities.
  */
-export const POWERSHELL_AGENT_VERSION = '2.6.0-ps1';
+export const POWERSHELL_AGENT_VERSION = '2.6.1-ps1';
 export const POWERSHELL_AGENT_CAPABILITIES = ['wifi_diagnostics', 'network_diagnostic_commands', 'agent_self_update'] as const;
 
 export function generatePowerShellAgent(serverUrl: string, registrationCode: string = '', expectedDeviceId: string = ''): string {
@@ -41,7 +41,21 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '    [switch]$InstallAsStartupTask',
     ')',
     '',
-    '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13',
+    '# TLS 1.3 is not an enum value in Windows PowerShell 5.1 / .NET Framework.',
+    '# Start with TLS 1.2, then opt into TLS 1.3 only when the local runtime supports it.',
+    '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12',
+    'if ([Enum]::GetNames([Net.SecurityProtocolType]) -contains "Tls13") {',
+    '    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls13',
+    '}',
+    '',
+    '# A scheduled task, a manual launch, and an update restart must never collect',
+    '# and post duplicate telemetry at the same time for one Windows user.',
+    '$agentMutexCreated = $false',
+    '$agentMutex = New-Object System.Threading.Mutex($true, "Local\\PCMonitoringAgent_$($env:USERNAME)", [ref]$agentMutexCreated)',
+    'if (-not $agentMutexCreated) {',
+    '    Write-Host "[INFO] Another PC Monitoring Agent instance is already running for this user. Exiting." -ForegroundColor Yellow',
+    '    exit 0',
+    '}',
     '',
     'if ($ServerUrl -match "^http://.*\\.run\\.app") {',
     '    $ServerUrl = $ServerUrl -replace "^http://", "https://"',
@@ -963,7 +977,14 @@ function Get-WifiDiagnostics {
     '        if ($res.networkDiagnosticIntervalSec -and [int]$res.networkDiagnosticIntervalSec -ge 10) { $NetworkDiagnosticIntervalSeconds = [int]$res.networkDiagnosticIntervalSec }',
     '        if ($pendingUpdateReceipt) { Remove-Item -LiteralPath $UpdateReceiptFile -Force -ErrorAction SilentlyContinue; $pendingUpdateReceipt = $null }',
     '        $pendingCommandResults = @()',
-    '        $commandResponse = Invoke-RestMethod -Uri "$ServerUrl/api/agent/commands?deviceId=$DeviceId" -Method Get -Headers $headers -TimeoutSec 10',
+    '        # Command retrieval is optional. A server that only supports telemetry',
+    '        # must not make a successfully delivered heartbeat look like a failure.',
+    '        $commandResponse = $null',
+    '        try {',
+    '            $commandResponse = Invoke-RestMethod -Uri "$ServerUrl/api/agent/commands?deviceId=$DeviceId" -Method Get -Headers $headers -TimeoutSec 10 -ErrorAction Stop',
+    '        } catch {',
+    '            Write-Host "[WARN] Telemetry was delivered, but command polling is unavailable: $($_.Exception.Message)" -ForegroundColor Yellow',
+    '        }',
     '        if ($commandResponse.command -and $commandResponse.command.type -eq "safe_shutdown") {',
     '            $message = "IT safety shutdown requested. This computer will turn off in 60 seconds. To cancel locally, run: shutdown /a"',
     '            Write-Host "[SAFETY] $message" -ForegroundColor Yellow',

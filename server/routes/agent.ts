@@ -53,6 +53,12 @@ router.post('/register', (req, res) => {
     if (rawSpecs.motherboard && device.manufacturer === 'Custom Build') {
       device.manufacturer = rawSpecs.motherboard.split(' ')[0];
     }
+    if (rawSpecs.agentVersion) {
+      device.agentVersion = String(rawSpecs.agentVersion);
+    }
+    if (Array.isArray(rawSpecs.agentCapabilities)) {
+      device.agentCapabilities = rawSpecs.agentCapabilities.map(String).filter(Boolean);
+    }
   }
 
   // Store hardware specs
@@ -161,6 +167,12 @@ router.post('/telemetry', (req, res) => {
   if (telemetry.network?.mac) {
     device.macAddress = telemetry.network.mac;
   }
+  if (telemetry.agentVersion) {
+    device.agentVersion = String(telemetry.agentVersion);
+  }
+  if (Array.isArray(telemetry.agentCapabilities)) {
+    device.agentCapabilities = telemetry.agentCapabilities.map(String).filter(Boolean);
+  }
 
   // Update latest telemetry
   data.latestTelemetry[device.id] = {
@@ -199,6 +211,21 @@ router.post('/telemetry', (req, res) => {
     status: device.status,
     activeIssues: device.activeIssueCount || 0
   });
+});
+
+// Local deployments do not yet expose remote command administration, but the
+// endpoint is intentionally present so a successful telemetry delivery is not
+// treated as a failure by current Windows agents. Cloudflare deployments add
+// authenticated command dispatch through the Worker implementation.
+router.get('/commands', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace(/^Bearer\s+/i, '');
+  const deviceId = String(req.query.deviceId || '');
+  const device = db.get().devices.find(d => token && d.deviceToken === token && d.id === deviceId);
+  if (!device) {
+    return res.status(401).json({ success: false, error: 'Unauthorized device token.' });
+  }
+  return res.json({ command: null });
 });
 
 // 4. Download agent scripts
@@ -355,6 +382,7 @@ router.post('/emulator/send', requireSession, (req, res) => {
     telemetry
   });
 });
+
 */
 
 export default router;
