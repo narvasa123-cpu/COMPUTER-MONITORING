@@ -4,6 +4,19 @@ import { SystemSettings } from '../../src/types/index';
 
 const router = Router();
 
+const numericLimits: Record<string, [number, number]> = {
+  heartbeatIntervalSec: [2, 300],
+  connectionLostThresholdSec: [5, 3600],
+  offlineThresholdSec: [10, 86400],
+  telemetryRetentionPoints: [20, 10000],
+  networkHistoryRetentionPoints: [20, 10000],
+  networkDiagnosticIntervalSec: [10, 3600],
+  networkWeakSignalThresholdPercent: [1, 100],
+  networkHighLatencyMs: [1, 10000],
+  networkPacketLossThresholdPercent: [1, 100],
+  networkIncidentCooldownSec: [30, 86400]
+};
+
 router.get('/', (req, res) => {
   const data = db.get();
   return res.json(data.settings);
@@ -20,12 +33,22 @@ router.put('/', (req, res) => {
     enableSoundAlerts 
   } = req.body;
 
-  if (heartbeatIntervalSec !== undefined) data.settings.heartbeatIntervalSec = Number(heartbeatIntervalSec);
-  if (connectionLostThresholdSec !== undefined) data.settings.connectionLostThresholdSec = Number(connectionLostThresholdSec);
-  if (offlineThresholdSec !== undefined) data.settings.offlineThresholdSec = Number(offlineThresholdSec);
-  if (telemetryRetentionPoints !== undefined) data.settings.telemetryRetentionPoints = Number(telemetryRetentionPoints);
-  if (autoCreateTicketOnCritical !== undefined) data.settings.autoCreateTicketOnCritical = Boolean(autoCreateTicketOnCritical);
-  if (enableSoundAlerts !== undefined) data.settings.enableSoundAlerts = Boolean(enableSoundAlerts);
+  for (const [field, [minimum, maximum]] of Object.entries(numericLimits)) {
+    if (req.body[field] === undefined) continue;
+    const value = Number(req.body[field]);
+    if (!Number.isFinite(value) || value < minimum || value > maximum) {
+      return res.status(400).json({ error: `${field} must be between ${minimum} and ${maximum}.` });
+    }
+    (data.settings as unknown as Record<string, number>)[field] = value;
+  }
+  if (data.settings.connectionLostThresholdSec < data.settings.heartbeatIntervalSec) {
+    return res.status(400).json({ error: 'Connection-lost threshold must be at least the heartbeat interval.' });
+  }
+  if (data.settings.offlineThresholdSec <= data.settings.connectionLostThresholdSec) {
+    return res.status(400).json({ error: 'Offline threshold must be greater than the connection-lost threshold.' });
+  }
+  if (autoCreateTicketOnCritical !== undefined) data.settings.autoCreateTicketOnCritical = autoCreateTicketOnCritical === true;
+  if (enableSoundAlerts !== undefined) data.settings.enableSoundAlerts = enableSoundAlerts === true;
 
   db.scheduleSave();
 

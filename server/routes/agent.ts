@@ -146,7 +146,24 @@ router.post('/heartbeat', (req, res) => {
 router.post('/telemetry', (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace('Bearer ', '') || req.body.deviceToken;
-  const telemetry: TelemetryPayload = req.body;
+  const body = req.body || {};
+  const numericFields: Array<[string, number, number]> = [
+    ['cpuUsagePercent', 0, 100],
+    ['ramUsagePercent', 0, 100],
+    ['ramUsedBytes', 0, Number.MAX_SAFE_INTEGER],
+    ['ramTotalBytes', 1, Number.MAX_SAFE_INTEGER],
+    ['uptimeSeconds', 0, Number.MAX_SAFE_INTEGER]
+  ];
+  for (const [field, minimum, maximum] of numericFields) {
+    const value = Number(body[field]);
+    if (!Number.isFinite(value) || value < minimum || value > maximum) {
+      return res.status(400).json({ success: false, error: `Telemetry field ${field} is invalid.` });
+    }
+  }
+  if (!Array.isArray(body.storage) || !Array.isArray(body.processes) || !body.network || typeof body.network !== 'object') {
+    return res.status(400).json({ success: false, error: 'Telemetry must include storage, processes, and network data.' });
+  }
+  const telemetry: TelemetryPayload = body;
 
   const data = db.get();
   const device = data.devices.find(d => token && d.deviceToken === token && (!telemetry.deviceId || d.id === telemetry.deviceId));

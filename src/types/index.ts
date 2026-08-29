@@ -196,6 +196,9 @@ export interface HardwareSpecs {
 export interface TelemetryPayload {
   deviceId: string;
   timestamp: string;
+  /** Optional metadata reported by the installed agent. */
+  agentVersion?: string;
+  agentCapabilities?: string[];
   cpuUsagePercent: number;
   cpuTempC?: number;
   ramUsedBytes: number;

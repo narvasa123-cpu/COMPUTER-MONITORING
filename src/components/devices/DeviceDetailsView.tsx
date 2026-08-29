@@ -45,7 +45,6 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   onLogMaintenanceForDevice
 }) => {
   const { 
-    devices, 
     refreshData, 
     setIsInstallModalOpen, 
     setInstallTargetDevice,
@@ -66,7 +65,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
 
   useEffect(() => {
     fetchDeviceData();
-  }, [deviceId, devices]);
+  }, [deviceId]);
 
   const fetchDeviceData = async () => {
     try {
@@ -126,7 +125,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   };
 
   const formatBytes = (bytes?: number) => {
-    if (!bytes) return '0 GB';
+    if (bytes === undefined || bytes === null || !Number.isFinite(bytes)) return 'Unavailable';
     return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
   };
 
@@ -521,7 +520,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
               <div className="text-[11px] text-slate-500 space-y-1 pt-1 border-t border-slate-100">
                 <div className="flex justify-between">
                   <span>Processor Model:</span>
-                  <span className="font-semibold text-slate-700 truncate max-w-[140px]">{specs?.cpuModel || 'Intel / AMD'}</span>
+                  <span className="font-semibold text-slate-700 truncate max-w-[140px]">{specs?.cpuModel || 'Unavailable'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Cores / Threads:</span>
@@ -573,7 +572,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span>Total Capacity:</span>
-                  <span className="font-semibold text-slate-700">{formatBytes(tel?.ramTotalBytes || specs?.totalRamBytes)} ({specs?.ramType || 'DDR4'})</span>
+                  <span className="font-semibold text-slate-700">{formatBytes(tel?.ramTotalBytes || specs?.ramTotalBytes)} ({specs?.ramType || 'Type unavailable'})</span>
                 </div>
               </div>
             </div>
@@ -635,7 +634,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span>Fan Status:</span>
-                  <span className="font-semibold text-slate-700">Active (Auto PWM)</span>
+                  <span className="font-semibold text-slate-700">{tel?.fanSpeedRpm !== undefined ? `${tel.fanSpeedRpm} RPM` : 'Unavailable'}</span>
                 </div>
                 {tel?.gpuTempC && (
                   <div className="flex justify-between">
@@ -654,16 +653,16 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
                   <h4 className="text-xs font-bold text-slate-900">Power & Battery</h4>
                 </div>
                 <span className="text-xs font-extrabold text-slate-800">
-                  {tel?.battery ? `${tel.battery.percent}%` : 'AC Powered'}
+                  {tel?.battery?.present ? `${tel.battery.percentage}%` : tel?.battery ? 'No battery detected' : 'Unavailable'}
                 </span>
               </div>
 
               <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                 <div 
                   className={`h-full transition-all duration-500 rounded-full ${
-                    (tel?.battery?.percent || 100) < 15 ? 'bg-rose-500' : 'bg-emerald-500'
+                    (tel?.battery?.percentage || 0) < 15 ? 'bg-rose-500' : 'bg-emerald-500'
                   }`}
-                  style={{ width: `${tel?.battery?.percent || 100}%` }}
+                    style={{ width: `${tel?.battery?.present ? tel.battery.percentage : 0}%` }}
                 />
               </div>
 
@@ -671,16 +670,16 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
                 <div className="flex justify-between">
                   <span>Power Source:</span>
                   <span className="font-semibold text-slate-700">
-                    {tel?.battery?.isCharging ? 'AC Adapter (Charging)' : tel?.battery ? 'Battery (Discharging)' : 'Direct AC Wall Outlet'}
+                    {tel?.battery?.present ? (tel.battery.isCharging ? 'AC Adapter (Charging)' : 'Battery (Discharging)') : tel?.battery ? 'No battery detected' : 'Unavailable'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Battery Health:</span>
-                  <span className="font-semibold text-emerald-700">{tel?.battery?.healthPercent ? `${tel.battery.healthPercent}% Capacity` : 'N/A (Desktop)'}</span>
+                  <span className="font-semibold text-slate-700">{tel?.battery?.present && tel.battery.healthPercent !== undefined ? `${tel.battery.healthPercent}% Capacity` : 'Unavailable'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Power Plan:</span>
-                  <span className="font-semibold text-slate-700">High Performance</span>
+                  <span className="font-semibold text-slate-700">Not reported</span>
                 </div>
               </div>
             </div>
@@ -740,7 +739,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
                       <span>S.M.A.R.T. Health Status:</span>
                       <span className="font-bold text-emerald-600 flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" />
-                        {disk.smartStatus || 'Healthy (PASSED)'}
+                         {disk.smartStatus || disk.health || 'Unavailable'}
                       </span>
                     </div>
                   </div>
@@ -774,7 +773,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             {/* Processor */}
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase">Processor (CPU)</p>
-              <p className="text-xs font-bold text-slate-900">{specs?.cpuModel || 'Generic x86_64'}</p>
+              <p className="text-xs font-bold text-slate-900">{specs?.cpuModel || 'Unavailable'}</p>
               <p className="text-[11px] text-slate-500">
                 {specs?.cpuCores || '--'} Physical Cores • {specs?.cpuThreads || '--'} Logical Threads @ {specs?.cpuMaxClockMhz ? `${(specs.cpuMaxClockMhz / 1000).toFixed(2)} GHz` : '3.6 GHz'}
               </p>
@@ -783,9 +782,9 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             {/* Motherboard & BIOS */}
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase">Motherboard & BIOS</p>
-              <p className="text-xs font-bold text-slate-900">{specs?.motherboardModel || 'OEM System Board'}</p>
+              <p className="text-xs font-bold text-slate-900">{specs?.motherboard || 'Unavailable'}</p>
               <p className="text-[11px] text-slate-500">
-                Manufacturer: {specs?.motherboardManufacturer || 'System Vendor'} • BIOS: {specs?.biosVersion || '1.14.0'}
+                BIOS: {specs?.biosVersion || 'Unavailable'}
               </p>
             </div>
 
@@ -794,14 +793,14 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
               <p className="text-[10px] font-bold text-slate-400 uppercase">Installed Memory (RAM)</p>
               <p className="text-xs font-bold text-slate-900">{formatBytes(specs?.totalRamBytes || tel?.ramTotalBytes)}</p>
               <p className="text-[11px] text-slate-500">
-                Type: {specs?.ramType || 'DDR4'} • Slots Used: {specs?.ramSlotsUsed || 2} / {specs?.ramSlotsTotal || 4}
+                Type: {specs?.ramType || 'Unavailable'}
               </p>
             </div>
 
             {/* Graphics Card */}
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase">Graphics Processing (GPU)</p>
-              <p className="text-xs font-bold text-slate-900">{specs?.gpuModel || 'Integrated Intel UHD / AMD Radeon'}</p>
+              <p className="text-xs font-bold text-slate-900">{specs?.gpuModel || 'Unavailable'}</p>
               <p className="text-[11px] text-slate-500">
                 VRAM: {specs?.gpuMemoryBytes ? formatBytes(specs.gpuMemoryBytes) : 'Shared System RAM'}
               </p>
@@ -810,18 +809,18 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             {/* Network Interfaces */}
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase">Network Controller</p>
-              <p className="text-xs font-bold text-slate-900">{device.ipAddress || '192.168.1.XX'}</p>
+              <p className="text-xs font-bold text-slate-900">{device.ipAddress || 'Unavailable'}</p>
               <p className="text-[11px] font-mono text-slate-500">
-                MAC: {device.macAddress || 'XX:XX:XX:XX:XX:XX'} (Gigabit Ethernet)
+                MAC: {device.macAddress || 'Unavailable'}
               </p>
             </div>
 
             {/* Serial & Chassis */}
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase">Chassis & Serial Tag</p>
-              <p className="text-xs font-bold font-mono text-slate-900">{device.serialNumber || 'SN-UNKNOWN'}</p>
+              <p className="text-xs font-bold font-mono text-slate-900">{device.serialNumber || 'Unavailable'}</p>
               <p className="text-[11px] text-slate-500">
-                Manufacturer: {device.manufacturer || 'Dell Inc.'} • Model: {device.model || 'Workstation'}
+                Manufacturer: {device.manufacturer || 'Unavailable'} • Model: {device.model || 'Unavailable'}
               </p>
             </div>
           </div>

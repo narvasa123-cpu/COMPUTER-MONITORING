@@ -94,13 +94,30 @@ export const MonitoringProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     refreshData();
   }, [refreshData]);
 
-  // Polling loop every 3.5 seconds
+  // Keep the console responsive without creating a request storm. Live agent
+  // telemetry is persisted server-side; the dashboard only needs a short sync
+  // interval while it is visible.
   useEffect(() => {
     if (!isPolling) return;
-    const interval = setInterval(() => {
-      refreshData();
-    }, 3500);
-    return () => clearInterval(interval);
+    let interval: number | undefined;
+    const schedule = () => {
+      if (document.visibilityState !== 'visible') return;
+      interval = window.setTimeout(() => {
+        void refreshData().finally(schedule);
+      }, 10000);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshData();
+        schedule();
+      }
+    };
+    schedule();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      if (interval !== undefined) window.clearTimeout(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [isPolling, refreshData]);
 
   const markNotificationRead = async (id: string) => {

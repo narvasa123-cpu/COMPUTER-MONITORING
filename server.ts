@@ -27,9 +27,17 @@ async function startServer() {
 
   // CORS & Security headers for agent communication
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(value => value.trim()).filter(Boolean);
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin && (allowedOrigins.length === 0 ? requestOrigin === `${req.protocol}://${req.headers.host}` : allowedOrigins.includes(requestOrigin))) {
+      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+      res.setHeader('Vary', 'Origin');
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
     }
