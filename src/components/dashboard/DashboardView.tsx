@@ -20,6 +20,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { useMonitoring } from '../../context/MonitoringContext';
+import { useAuth } from '../../context/AuthContext';
 import { Device, SystemNotification } from '../../types/index';
 import { SeverityBadge, StatusBadge } from '../common/Badge';
 
@@ -98,6 +99,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectDevice }) 
     setInstallTargetDevice,
     setActiveTab
   } = useMonitoring();
+  const { user } = useAuth();
+  const isViewer = user?.role === 'viewer';
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const totalDevices = summary?.totalDevices ?? 0;
@@ -246,15 +249,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectDevice }) 
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <button
+              {!isViewer && <button
                 id="dash-add-device-btn"
                 onClick={() => setIsAddModalOpen(true)}
                 className="inline-flex items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-xs font-bold text-slate-950 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-white/60"
               >
                 <Plus className="h-4 w-4" />
                 Register computer
-              </button>
-              <button
+              </button>}
+              {!isViewer && <button
                 onClick={() => {
                   setInstallTargetDevice(null);
                   setIsInstallModalOpen(true);
@@ -263,7 +266,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectDevice }) 
               >
                 <Download className="h-4 w-4" />
                 Agent deployment
-              </button>
+              </button>}
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing || loading}

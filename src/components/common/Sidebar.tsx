@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useMonitoring } from '../../context/MonitoringContext';
+import { useAuth } from '../../context/AuthContext';
 
 type NavigationItem = {
   id: string;
@@ -38,7 +39,9 @@ export const Sidebar: React.FC = () => {
     setSelectedDeviceId,
     summary,
   } = useMonitoring();
+  const { user } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const isViewer = user?.role === 'viewer';
 
   useEffect(() => {
     const toggleSidebar = () => setIsMobileOpen((open) => !open);
@@ -129,11 +132,14 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <nav className="app-sidebar-nav min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4" aria-label="Primary navigation">
-          {groups.map((group, groupIndex) => (
+          {groups.map((group, groupIndex) => {
+            const visibleItems = group.items.filter((item) => !(isViewer && (item.id === 'users' || item.id === 'audit')));
+            if (visibleItems.length === 0) return null;
+            return (
             <section key={group.label} className={groupIndex === 0 ? '' : 'mt-6'} aria-label={group.label}>
               <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">{group.label}</p>
               <div className="space-y-1">
-                {group.items.map((item) => {
+                {visibleItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
                   const hasBadge = (item.badge ?? 0) > 0;
@@ -171,7 +177,8 @@ export const Sidebar: React.FC = () => {
                 })}
               </div>
             </section>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="app-sidebar-footer shrink-0 border-t border-white/10 bg-slate-950/80 p-3">

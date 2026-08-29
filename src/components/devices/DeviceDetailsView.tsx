@@ -247,7 +247,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {/* Installation and update are deliberately separate: a paired asset
               must never receive another registration-code installation flow. */}
-          {!isPairedWithAgent ? (
+          {!isPairedWithAgent && user?.role !== 'viewer' ? (
             <button
               onClick={() => {
                 setInstallTargetDevice(device);

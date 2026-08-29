@@ -18,6 +18,7 @@ interface DeviceCardProps {
   device: Device;
   onClick: () => void;
   onInstallClick: () => void;
+  showInstallAction?: boolean;
 }
 
 const formatLastHeartbeat = (iso?: string) => {
@@ -37,7 +38,7 @@ const metricTone = (value: number | undefined, warning: number, critical: number
   return 'text-slate-900';
 };
 
-export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onClick, onInstallClick }) => {
+export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onClick, onInstallClick, showInstallAction = true }) => {
   const telemetry = device.latestTelemetry;
   const isWaiting = device.connectionState === 'never_connected' || device.status === 'Waiting for Agent Connection';
   const isLive = device.connectionState === 'connected' && Boolean(telemetry);
@@ -110,7 +111,7 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onClick, onInsta
         <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
           <p className="text-xs font-bold text-sky-950">Awaiting first agent heartbeat</p>
           <p className="mt-1 text-[11px] leading-4 text-sky-800">This asset is not presented as online until its physical computer pairs and sends authenticated telemetry.</p>
-          <button
+          {showInstallAction && <button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
@@ -120,7 +121,7 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onClick, onInsta
           >
             <Download className="h-3.5 w-3.5" />
             Open agent setup
-          </button>
+          </button>}
         </div>
       ) : (
         <div className="mt-3">

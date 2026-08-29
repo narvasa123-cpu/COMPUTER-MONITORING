@@ -112,16 +112,18 @@ export const Header: React.FC = () => {
             </button>
           </div>
 
-          <button
-            id="header-add-device-btn"
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white shadow-[0_6px_14px_rgba(79,70,229,0.24)] transition hover:bg-indigo-700 hover:shadow-[0_8px_18px_rgba(79,70,229,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 sm:px-3.5"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Add computer</span>
-            <span className="sr-only sm:hidden">Add computer</span>
-          </button>
+          {user?.role !== 'viewer' && (
+            <button
+              id="header-add-device-btn"
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white shadow-[0_6px_14px_rgba(79,70,229,0.24)] transition hover:bg-indigo-700 hover:shadow-[0_8px_18px_rgba(79,70,229,0.3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 sm:px-3.5"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Add computer</span>
+              <span className="sr-only sm:hidden">Add computer</span>
+            </button>
+          )}
 
           <div className="relative">
             <button

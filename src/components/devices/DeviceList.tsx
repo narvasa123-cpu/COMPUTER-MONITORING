@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { DeviceCard } from './DeviceCard';
 import { useMonitoring } from '../../context/MonitoringContext';
+import { useAuth } from '../../context/AuthContext';
 import { Department, Device, Location } from '../../types/index';
 import { StatusBadge } from '../common/Badge';
 
@@ -46,6 +47,8 @@ export const DeviceList: React.FC<DeviceListProps> = ({ onSelectDevice }) => {
     setInstallTargetDevice,
     refreshData
   } = useMonitoring();
+  const { user } = useAuth();
+  const isViewer = user?.role === 'viewer';
 
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
@@ -130,7 +133,7 @@ export const DeviceList: React.FC<DeviceListProps> = ({ onSelectDevice }) => {
               <p className="mt-1 max-w-2xl text-sm text-slate-500">Manage registered workstations, verify agent connectivity, and open a device record for its evidence and maintenance history.</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          {!isViewer && <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -151,7 +154,7 @@ export const DeviceList: React.FC<DeviceListProps> = ({ onSelectDevice }) => {
               <Plus className="h-4 w-4" />
               Register computer
             </button>
-          </div>
+          </div>}
         </div>
 
         <div className="app-device-summary-grid grid border-t border-slate-100 sm:grid-cols-2 xl:grid-cols-4">
@@ -265,7 +268,7 @@ export const DeviceList: React.FC<DeviceListProps> = ({ onSelectDevice }) => {
               : 'Adjust or clear the current filters to return to the full monitored inventory.'}
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {devices.length === 0 ? (
+            {devices.length === 0 && !isViewer ? (
               <button id="empty-state-add-btn" type="button" onClick={() => setIsAddModalOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"><Plus className="h-4 w-4" />Register first computer</button>
             ) : (
               <button type="button" onClick={clearFilters} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"><X className="h-4 w-4" />Clear all filters</button>
@@ -283,6 +286,7 @@ export const DeviceList: React.FC<DeviceListProps> = ({ onSelectDevice }) => {
                 setInstallTargetDevice(device);
                 setIsInstallModalOpen(true);
               }}
+              showInstallAction={!isViewer}
             />
           ))}
         </div>
