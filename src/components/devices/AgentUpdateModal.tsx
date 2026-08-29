@@ -72,7 +72,7 @@ export const AgentUpdateModal: React.FC = () => {
     || device?.agentUpdateStatus === 'dispatched'
     || device?.agentUpdateStatus === 'package_delivered'
     || device?.agentUpdateStatus === 'awaiting_verification';
-  const updateCommand = 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\pc-monitoring-agent-update.ps1 -InstallAsStartupTask';
+  const updateCommand = 'powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Downloads\\pc-monitoring-agent-update.ps1" -InstallAsStartupTask';
 
   useEffect(() => {
     if (!isAgentUpdateModalOpen) return;
@@ -240,7 +240,8 @@ export const AgentUpdateModal: React.FC = () => {
                 </div>
                 {!canManageUpdates && <p className="mt-3 text-xs text-amber-800">Only an IT administrator can generate or request an agent update. Your access is read-only.</p>}
                 <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3">
-                  <p className="mb-1.5 font-sans text-[10px] font-bold uppercase tracking-wide text-slate-400">Run on the target computer after download</p>
+                   <p className="mb-1.5 font-sans text-[10px] font-bold uppercase tracking-wide text-slate-400">Run on the target computer after download</p>
+                   <p className="mb-2 font-sans text-[11px] leading-4 text-slate-400">The package normally downloads to your Downloads folder. If it was saved elsewhere, replace the path in the command.</p>
                   <div className="flex items-center gap-2"><code className="min-w-0 flex-1 break-all text-xs text-emerald-400">{updateCommand}</code><button type="button" onClick={() => void copyUpdateCommand()} className="rounded bg-slate-800 p-1.5 text-slate-200 hover:bg-slate-700" title="Copy update command">{copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}</button></div>
                 </div>
               </div>
