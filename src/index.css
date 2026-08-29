@@ -215,6 +215,12 @@ button:not(:disabled),
   }
 }
 
+@media (max-width: 767px) {
+  .app-header-subtitle {
+    display: none;
+  }
+}
+
 @media (max-width: 420px) {
   .app-header-inner {
     gap: 0.375rem;

@@ -81,7 +81,7 @@ export const Header: React.FC = () => {
                 {isPolling ? 'Sync active' : 'Sync paused'}
               </span>
             </div>
-            <p className="mt-0.5 hidden text-xs text-slate-500 sm:block">
+            <p className="app-header-subtitle mt-0.5 hidden text-xs text-slate-500 sm:block">
               Health intelligence <span className="mx-1 text-slate-300">•</span> Diagnostics <span className="mx-1 text-slate-300">•</span> Incident response <span className="mx-1 text-slate-300">•</span> Maintenance
             </p>
           </div>
