@@ -297,67 +297,75 @@ export const AddDeviceModal: React.FC = () => {
         </form>
       ) : (
         /* Success Screen with Registration Code & Next Steps */
-        <div className="space-y-5 text-center py-2">
-          <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-7 h-7" />
+        <div className="space-y-5 py-1">
+          <div className="flex flex-col items-center text-center">
+            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 ring-8 ring-emerald-50/60">
+              <CheckCircle2 className="h-7 w-7" />
+            </div>
+            <h4 className="mt-4 text-xl font-extrabold tracking-tight text-slate-950">Computer registered successfully</h4>
+            <p className="mt-1 text-sm text-slate-500">Install the agent on this computer to start receiving verified telemetry.</p>
           </div>
 
           <div>
-            <h4 className="text-base font-bold text-slate-900">
+            <h4 className="sr-only">
               {createdDevice?.deviceName} Registered!
             </h4>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="mt-0.5 text-center text-xs text-slate-500">
               Asset ID: <span className="font-mono font-bold text-slate-700">{createdDevice?.assetId}</span> • Status: <span className="text-sky-600 font-semibold">Waiting for Agent Connection</span>
             </p>
           </div>
 
           {/* Registration Code Banner */}
-          <div className="p-4 bg-slate-900 rounded-xl text-white max-w-md mx-auto shadow-inner">
+          <div className="mx-auto w-full max-w-xl rounded-2xl border border-indigo-200 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-5 text-white shadow-lg shadow-slate-900/10">
             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-              Device Registration Code
+              One-time registration code
             </p>
-            <div className="flex items-center justify-center gap-3">
-              <span className="font-mono text-2xl font-black tracking-widest text-indigo-300">
+            <div className="flex items-start justify-between gap-4">
+              <span className="min-w-0 break-all text-left font-mono text-lg font-extrabold leading-7 tracking-[0.12em] text-indigo-100 sm:text-xl">
                 {createdDevice?.registrationCode}
               </span>
               <button
                 id="copy-reg-code-btn"
+                type="button"
                 onClick={copyCode}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-                title="Copy code"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
               >
-                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {copied ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
           </div>
 
-          <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs text-slate-600 max-w-lg mx-auto">
-            <p className="font-bold text-slate-900 flex items-center gap-1.5">
-              <Monitor className="w-4 h-4 text-indigo-600" /> Installation Steps on the Physical Computer:
+          <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-left text-xs text-slate-600">
+            <p className="flex items-center gap-2 font-extrabold text-slate-900">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-100 text-indigo-600"><Monitor className="h-4 w-4" /></span>
+              Install on the physical computer
             </p>
-            <ol className="list-decimal list-inside space-y-1.5 pl-1">
-              <li>Open PowerShell as Administrator on the physical computer.</li>
-              <li>Run the Agent script or download the standalone package.</li>
-              <li>When prompted, enter registration code: <strong className="font-mono text-indigo-700">{createdDevice?.registrationCode}</strong></li>
-              <li>The computer will automatically switch to <strong className="text-emerald-700">ONLINE</strong> and transmit live CPU, RAM, Disk, and Hardware specs!</li>
+            <ol className="mt-3 grid gap-2 leading-5 sm:grid-cols-2">
+              <li className="flex gap-2"><span className="font-bold text-indigo-600">1.</span><span>Open PowerShell as Administrator.</span></li>
+              <li className="flex gap-2"><span className="font-bold text-indigo-600">2.</span><span>Run the monitoring agent installer.</span></li>
+              <li className="flex gap-2"><span className="font-bold text-indigo-600">3.</span><span>Enter the one-time code when prompted.</span></li>
+              <li className="flex gap-2"><span className="font-bold text-indigo-600">4.</span><span>Wait for the device to report <strong className="text-emerald-700">ONLINE</strong>.</span></li>
             </ol>
           </div>
 
-          <div className="flex items-center justify-center gap-3 pt-3 border-t border-slate-100">
+          <div className="flex flex-col-reverse items-stretch justify-end gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
             <button
+              type="button"
               onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100"
             >
-              Done / Close
+              Close
             </button>
             <button
               id="open-agent-modal-from-reg-btn"
+              type="button"
               onClick={() => {
                 setIsAddModalOpen(false);
                 setInstallTargetDevice(createdDevice);
                 setIsInstallModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-xs"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
             >
               <Download className="w-4 h-4" />
               Open Agent Setup & Commands
