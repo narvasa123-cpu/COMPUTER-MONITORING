@@ -86,7 +86,20 @@ export class DiagnosticEngine {
       });
     }
 
-    // 5. GPU Temperature Rule
+    // 5. Cooling Fan Rule. Some laptops stop fans at idle, so only flag a
+    // low reading when the processor is already hot.
+    const fanRule = rules.find(r => r.code === 'FAN_FAILURE');
+    if (fanRule && telemetry.cpuTempC !== undefined && telemetry.cpuTempC >= 70 && telemetry.fanSpeedRpm !== undefined && telemetry.fanSpeedRpm < fanRule.thresholdValue) {
+      triggeredRuleCodes.add('FAN_FAILURE');
+      this.ensureIssue(device, locationName, departmentName, fanRule, {
+        metric: 'Cooling Fan Speed',
+        currentValue: `${telemetry.fanSpeedRpm} RPM at ${telemetry.cpuTempC.toFixed(1)}°C`,
+        thresholdValue: `${fanRule.thresholdValue} RPM minimum`,
+        details: `The processor is at ${telemetry.cpuTempC.toFixed(1)}°C while the reported fan speed is only ${telemetry.fanSpeedRpm} RPM. Cooling may be obstructed or failing.`
+      });
+    }
+
+    // 6. GPU Temperature Rule
     const gpuTempRule = rules.find(r => r.code === 'HIGH_GPU_TEMP');
     if (gpuTempRule && telemetry.gpuTempC && telemetry.gpuTempC >= gpuTempRule.thresholdValue) {
       triggeredRuleCodes.add('HIGH_GPU_TEMP');
@@ -144,6 +157,7 @@ export class DiagnosticEngine {
       'HIGH_RAM_USAGE', 
       'LOW_DISK_SPACE', 
       'HIGH_CPU_TEMP', 
+      'FAN_FAILURE',
       'HIGH_GPU_TEMP', 
       'LOW_BATTERY'
     ];

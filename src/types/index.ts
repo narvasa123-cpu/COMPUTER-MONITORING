@@ -290,6 +290,7 @@ export type DiagnosticRuleCode =
   | 'HIGH_RAM_USAGE'
   | 'LOW_DISK_SPACE'
   | 'HIGH_CPU_TEMP'
+  | 'FAN_FAILURE'
   | 'HIGH_GPU_TEMP'
   | 'LOW_BATTERY'
   | 'BATTERY_DEGRADED'

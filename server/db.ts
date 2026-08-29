@@ -148,6 +148,20 @@ const DEFAULT_DIAGNOSTIC_RULES: DiagnosticRule[] = [
     ]
   },
   {
+    id: 'rule-fan-failure',
+    code: 'FAN_FAILURE',
+    name: 'Cooling Fan Failure',
+    metric: 'fan_speed',
+    thresholdValue: 500,
+    thresholdUnit: 'RPM minimum',
+    durationSeconds: 20,
+    severity: 'Critical',
+    description: 'Triggers when the system is hot but the reported cooling fan speed is below 500 RPM.',
+    enabled: true,
+    possibleCauses: ['Blocked or failed CPU / chassis fan', 'Dust buildup in vents or heatsink', 'Fan sensor unavailable or reporting an incorrect speed'],
+    recommendedActions: ['Inspect that the CPU and chassis fans are spinning', 'Clean vents and heatsink fins with compressed air', 'Replace a failed fan and verify temperatures after repair']
+  },
+  {
     id: 'rule-gpu-temp',
     code: 'HIGH_GPU_TEMP',
     name: 'GPU Overheating',
@@ -461,10 +475,14 @@ class DatabaseStore {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
-        // Ensure diagnostic rules are up to date
-        if (!parsed.diagnosticRules || parsed.diagnosticRules.length === 0) {
-          parsed.diagnosticRules = DEFAULT_DIAGNOSTIC_RULES;
-        }
+        // Ensure new built-in diagnostic rules are added to existing stores
+        // without overwriting thresholds customized by administrators.
+        const savedRules = Array.isArray(parsed.diagnosticRules) ? parsed.diagnosticRules : [];
+        const savedRuleCodes = new Set(savedRules.map((rule: DiagnosticRule) => rule.code));
+        parsed.diagnosticRules = [
+          ...DEFAULT_DIAGNOSTIC_RULES.filter(rule => !savedRuleCodes.has(rule.code)),
+          ...savedRules
+        ];
         if (!parsed.settings) {
           parsed.settings = DEFAULT_SETTINGS;
         }

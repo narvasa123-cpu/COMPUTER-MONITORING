@@ -237,6 +237,12 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
       detail: 'Thermal operating range'
     },
     {
+      label: 'Cooling fan',
+      value: tel?.fanSpeedRpm !== undefined ? `${tel.fanSpeedRpm} RPM` : 'Unavailable',
+      status: tel?.fanSpeedRpm === undefined ? 'Unavailable' : tel.fanSpeedRpm < 500 && (tel.cpuTempC ?? 0) >= 70 ? 'Critical' : 'Healthy',
+      detail: tel?.fanSpeedRpm === undefined ? 'Sensor not exposed by firmware' : 'Reported fan speed'
+    },
+    {
       label: 'Storage health',
       value: tel?.storage?.length ? `${Math.round(lowestFreeStorage)}% free` : 'Unavailable',
       status: !tel?.storage?.length ? 'Unavailable' : tel.storage.some(disk => disk.health === 'Failing' || disk.smartStatus?.toLowerCase().includes('bad')) ? 'Critical' : lowestFreeStorage < 12 ? 'Warning' : 'Healthy',
