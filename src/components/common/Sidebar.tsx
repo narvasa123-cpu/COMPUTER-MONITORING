@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   Activity,
   Building2,
-  Download,
   FileText,
   History,
   LayoutDashboard,
@@ -38,8 +37,6 @@ export const Sidebar: React.FC = () => {
     setActiveTab,
     setSelectedDeviceId,
     summary,
-    setIsInstallModalOpen,
-    setInstallTargetDevice,
   } = useMonitoring();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -179,7 +176,7 @@ export const Sidebar: React.FC = () => {
 
         <div className="app-sidebar-footer shrink-0 border-t border-white/10 bg-slate-950/80 p-3">
           {summary && (
-            <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] p-2.5">
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] p-2.5">
               <div>
                 <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
                   <Activity className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
@@ -196,30 +193,6 @@ export const Sidebar: React.FC = () => {
               </div>
             </div>
           )}
-
-          <div className="rounded-xl border border-indigo-400/20 bg-gradient-to-br from-indigo-500/15 to-slate-900 px-3 py-3">
-            <div className="flex items-center gap-2 text-indigo-200">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-400/15">
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              </span>
-              <span className="text-xs font-bold">Monitoring agent</span>
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-              Install the agent on an actual device to receive verified heartbeats and telemetry.
-            </p>
-            <button
-              id="sidebar-install-guide-btn"
-              type="button"
-              onClick={() => {
-                setInstallTargetDevice(null);
-                setIsInstallModalOpen(true);
-                setIsMobileOpen(false);
-              }}
-              className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-indigo-500 px-2.5 py-2 text-[11px] font-bold text-white shadow-[0_6px_14px_rgba(79,70,229,0.22)] transition hover:bg-indigo-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
-            >
-              Agent setup
-            </button>
-          </div>
         </div>
       </div>
     </aside>
