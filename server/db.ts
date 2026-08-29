@@ -291,16 +291,16 @@ function getInitialDatabase(): DatabaseSchema {
         username: 'itadmin',
         email: 'itadmin@system.local',
         fullName: 'Network & Lab Administrator',
-        role: 'it_admin',
+        role: 'user',
         passwordHash: hashPassword('admin123'),
         createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString()
       },
       {
         id: techId,
-        username: 'technician',
+        username: 'support-user',
         email: 'tech@system.local',
         fullName: 'Hardware Support Specialist',
-        role: 'technician',
+        role: 'user',
         passwordHash: hashPassword('admin123'),
         createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString()
       },
@@ -309,17 +309,17 @@ function getInitialDatabase(): DatabaseSchema {
         username: 'depthead',
         email: 'depthead@system.local',
         fullName: 'Dr. Sarah Connor (Computer Science Head)',
-        role: 'department_head',
+        role: 'user',
         departmentId: 'dept-cs-01',
         passwordHash: hashPassword('admin123'),
         createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString()
       },
       {
         id: 'user-viewer-01',
-        username: 'viewer',
-        email: 'viewer@system.local',
+        username: 'staff-user',
+        email: 'staff.viewer@system.local',
         fullName: 'Staff Inspector',
-        role: 'viewer',
+        role: 'user',
         passwordHash: hashPassword('admin123'),
         createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString()
       }
@@ -475,6 +475,12 @@ class DatabaseStore {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.users)) {
+          parsed.users = parsed.users.map((user: User & { passwordHash: string }) => ({
+            ...user,
+            role: user.role === 'super_admin' ? 'super_admin' : 'user'
+          }));
+        }
         // Ensure new built-in diagnostic rules are added to existing stores
         // without overwriting thresholds customized by administrators.
         const savedRules = Array.isArray(parsed.diagnosticRules) ? parsed.diagnosticRules : [];

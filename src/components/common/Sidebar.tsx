@@ -41,7 +41,7 @@ export const Sidebar: React.FC = () => {
   } = useMonitoring();
   const { user } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const isViewer = user?.role === 'viewer';
+  const isViewer = user?.role === 'user';
 
   useEffect(() => {
     const toggleSidebar = () => setIsMobileOpen((open) => !open);

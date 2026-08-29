@@ -210,8 +210,8 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
 
   const tel = device.latestTelemetry;
   const specs = device.specs;
-  const canViewNetworkDiagnostics = user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician';
-  const canManageAgentUpdates = user?.role === 'super_admin' || user?.role === 'it_admin';
+  const canViewNetworkDiagnostics = user?.role === 'super_admin' || user?.role === 'user';
+  const canManageAgentUpdates = user?.role === 'super_admin';
   const isPairedWithAgent = device.connectionState !== 'never_connected';
   const lowestFreeStorage = tel?.storage?.reduce((lowest, disk) => {
     const freePercent = disk.capacityBytes > 0 ? (disk.freeBytes / disk.capacityBytes) * 100 : 100;
@@ -289,7 +289,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {/* Installation and update are deliberately separate: a paired asset
               must never receive another registration-code installation flow. */}
-          {!isPairedWithAgent && user?.role !== 'viewer' ? (
+          {!isPairedWithAgent && user?.role !== 'user' ? (
             <button
               onClick={() => {
                 setInstallTargetDevice(device);
@@ -311,7 +311,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             </button>
           ) : null}
 
-          {(user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician') && (
+          {user?.role === 'super_admin' && (
             <button
               onClick={handleRemoteSupport}
               disabled={device.connectionState !== 'connected'}
@@ -324,7 +324,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
           )}
 
           {/* Log Maintenance */}
-          {user?.role !== 'viewer' && (
+          {user?.role === 'super_admin' && (
             <button
               onClick={() => onLogMaintenanceForDevice && onLogMaintenanceForDevice(device)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors"
@@ -354,7 +354,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
           )}
 
           {/* Create Repair Ticket */}
-          {user?.role !== 'viewer' && (
+          {(user?.role === 'super_admin' || user?.role === 'user') && (
             <button
               onClick={() => onCreateTicketForDevice && onCreateTicketForDevice(device)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-xs"
@@ -365,7 +365,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
           )}
 
           {/* Delete Device (Admin only) */}
-          {(user?.role === 'super_admin' || user?.role === 'it_admin') && (
+          {user?.role === 'super_admin' && (
             <button
               onClick={handleDeleteDevice}
               disabled={deleting}
@@ -795,7 +795,7 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
       {activeTab === 'network' && canViewNetworkDiagnostics && (
         <NetworkDiagnosticsPanel
           device={device}
-          canRunDiagnostics={user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician'}
+          canRunDiagnostics={user?.role === 'super_admin'}
           canUpdateAgent={canManageAgentUpdates}
           onUpdateAgent={canManageAgentUpdates ? openAgentUpdate : undefined}
         />

@@ -49,23 +49,30 @@ async function startServer() {
   // Read access is authenticated for every console route. Mutations are also
   // enforced here, independent of whether the web UI happens to show a button.
   const controlWrite = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (req.method === 'GET') return next();
     const user = res.locals.user;
-    const isAdmin = user?.role === 'super_admin' || user?.role === 'it_admin';
-    const isTechnician = user?.role === 'technician';
-    if (req.path.startsWith('/users') || req.path.startsWith('/settings') || req.path.startsWith('/org')) {
+    const isAdmin = user?.role === 'super_admin';
+    const isUser = user?.role === 'user';
+    const route = req.baseUrl;
+    if (route.endsWith('/users')) {
+      return isAdmin ? next() : res.status(403).json({ error: 'Only the Super Admin can manage user accounts.' });
+    }
+    if (req.method === 'GET') return next();
+    if (route.endsWith('/settings') || route.endsWith('/org')) {
       return isAdmin ? next() : res.status(403).json({ error: 'Administrative permission is required.' });
     }
-    if (req.path.startsWith('/devices')) {
+    if (route.endsWith('/devices')) {
       return isAdmin ? next() : res.status(403).json({ error: 'Device inventory changes require IT administrator permission.' });
     }
-    if (req.path.startsWith('/diagnostics') || req.path.startsWith('/tickets') || req.path.startsWith('/maintenance')) {
-      return (isAdmin || isTechnician) ? next() : res.status(403).json({ error: 'Technician or administrator permission is required.' });
+    if (route.endsWith('/diagnostics') || route.endsWith('/maintenance')) {
+      return isAdmin ? next() : res.status(403).json({ error: 'Administrator permission is required.' });
+    }
+    if (route.endsWith('/tickets')) {
+      return (isAdmin || (isUser && req.method === 'POST')) ? next() : res.status(403).json({ error: 'Only Super Admins can manage tickets; Users may report a problem.' });
     }
     next();
   };
 
-  app.use('/api/devices', requireSession, requireRoles('super_admin', 'it_admin', 'technician', 'department_head', 'viewer'), deviceRoutes);
+  app.use('/api/devices', requireSession, requireRoles('super_admin', 'user'), deviceRoutes);
   app.use('/api/agent', agentRoutes);
   app.use('/api/diagnostics', requireSession, controlWrite, diagnosticRoutes);
   app.use('/api/tickets', requireSession, controlWrite, ticketRoutes);
@@ -73,7 +80,7 @@ async function startServer() {
   app.use('/api/org', requireSession, controlWrite, orgRoutes);
   app.use('/api/users', requireSession, controlWrite, userRoutes);
   app.use('/api/settings', requireSession, controlWrite, settingsRoutes);
-  app.use('/api/audit', requireSession, requireRoles('super_admin', 'it_admin'), auditRoutes);
+  app.use('/api/audit', requireSession, requireRoles('super_admin'), auditRoutes);
   app.use('/api/notifications', requireSession, notificationRoutes);
   app.use('/api/reports', requireSession, reportRoutes);
 

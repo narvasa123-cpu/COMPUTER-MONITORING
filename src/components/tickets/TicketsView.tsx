@@ -107,7 +107,8 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ onSelectDevice }) => {
   const criticalTickets = activeTickets.filter(ticket => ticket.severity === 'Critical').length;
   const unassignedTickets = activeTickets.filter(ticket => !ticket.assignedTechnicianName).length;
   const verificationPending = tickets.filter(ticket => ticket.status === 'Resolved' && ticket.verificationStatus === 'Pending').length;
-  const canManageTickets = user?.role !== 'viewer';
+  const canManageTickets = user?.role === 'super_admin';
+  const canReportProblem = user?.role === 'user' || canManageTickets;
   const statusTabs = [
     { id: 'ALL_ACTIVE', label: 'Active queue', count: activeTickets.length },
     { id: 'Open', label: 'Open', count: tickets.filter(ticket => ticket.status === 'Open').length },
@@ -134,7 +135,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ onSelectDevice }) => {
             <button type="button" onClick={() => void fetchTickets(true)} disabled={loading || refreshing} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing' : 'Refresh'}
             </button>
-            {canManageTickets && <button id="btn-create-new-ticket" type="button" onClick={() => setIsCreateModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"><Plus className="h-4 w-4" /> Create repair ticket</button>}
+            {canReportProblem && <button id="btn-create-new-ticket" type="button" onClick={() => setIsCreateModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"><Plus className="h-4 w-4" /> {canManageTickets ? 'Create repair ticket' : 'Report a problem'}</button>}
           </div>
         </div>
         <div className="grid border-t border-slate-100 sm:grid-cols-2 xl:grid-cols-4">

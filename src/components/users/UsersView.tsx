@@ -14,7 +14,7 @@ export const UsersView: React.FC = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<UserRole>('technician');
+  const [role, setRole] = useState<UserRole>('user');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export const UsersView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
         <div>
           <h2 className="text-lg font-bold text-slate-900">User Accounts & Role Permissions</h2>
-          <p className="text-xs text-slate-500">Super Admins, IT Administrators, Technicians, Department Heads, and Viewers.</p>
+          <p className="text-xs text-slate-500">Manage Super Admin and User accounts.</p>
         </div>
         {currentUser?.role === 'super_admin' && (
           <button
@@ -129,8 +129,8 @@ export const UsersView: React.FC = () => {
                 <td className="py-3 px-4">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                     u.role === 'super_admin' ? 'bg-purple-100 text-purple-800' :
-                    u.role === 'it_admin' ? 'bg-indigo-100 text-indigo-800' :
-                    u.role === 'technician' ? 'bg-amber-100 text-amber-800' :
+                    u.role === 'user' ? 'bg-indigo-100 text-indigo-800' :
+                    u.role === 'user' ? 'bg-amber-100 text-amber-800' :
                     'bg-slate-100 text-slate-700'
                   }`}>
                     {u.role.replace('_', ' ')}
@@ -207,10 +207,7 @@ export const UsersView: React.FC = () => {
                 onChange={e => setRole(e.target.value as UserRole)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
               >
-                <option value="technician">Technician</option>
-                <option value="it_admin">IT Administrator</option>
-                <option value="department_head">Department Head</option>
-                <option value="viewer">Viewer (Read-only)</option>
+                <option value="user">User</option>
                 <option value="super_admin">Super Admin</option>
               </select>
             </div>

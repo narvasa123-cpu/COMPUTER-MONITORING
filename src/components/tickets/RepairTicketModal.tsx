@@ -46,7 +46,7 @@ export const RepairTicketModal: React.FC<RepairTicketModalProps> = ({
         setSeverity('Medium');
         setPriority('Medium');
       }
-      setAssignedTechnicianName(user?.role === 'technician' ? user.fullName : 'Alex Rivera (Lead Technician)');
+      setAssignedTechnicianName(user?.role === 'user' ? user.fullName : 'Alex Rivera (Lead Technician)');
       setError(null);
     }
   }, [isOpen, targetDevice, targetIssue, devices, user]);
@@ -67,9 +67,9 @@ export const RepairTicketModal: React.FC<RepairTicketModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           deviceId: selectedDeviceId,
-          diagnosticIssueId: targetIssue?.id,
-          problem,
-          diagnosis,
+          issueId: targetIssue?.id,
+          title: problem,
+          description: `${diagnosis}${notes.trim() ? `\n\nUser notes: ${notes.trim()}` : ''}`,
           severity,
           priority,
           assignedTechnicianName,

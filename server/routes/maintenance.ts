@@ -74,7 +74,7 @@ router.post('/', (req, res) => {
   db.addAuditLog(
     technicianId || 'system-admin',
     technicianName || 'Technician',
-    'technician',
+    'user',
     'MAINTENANCE_LOGGED',
     'Maintenance',
     newRecord.id,

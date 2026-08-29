@@ -64,7 +64,7 @@ export const LocationsView: React.FC = () => {
           <h2 className="text-lg font-bold text-slate-900">Laboratories & Campus Locations</h2>
           <p className="text-xs text-slate-500">Computer labs, research rooms, testing suites, and departmental offices.</p>
         </div>
-        {user?.role === 'super_admin' || user?.role === 'it_admin' ? (
+        {user?.role === 'super_admin' ? (
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-xs"

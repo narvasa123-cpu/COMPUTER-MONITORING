@@ -62,7 +62,7 @@ export const AgentUpdateModal: React.FC = () => {
     return devices.find(candidate => candidate.id === agentUpdateTargetDevice.id) || agentUpdateTargetDevice;
   }, [agentUpdateTargetDevice, devices]);
 
-  const canManageUpdates = user?.role === 'super_admin' || user?.role === 'it_admin';
+  const canManageUpdates = user?.role === 'super_admin';
   const capabilities = device?.agentCapabilities || [];
   const supportsSelfUpdate = capabilities.includes('agent_self_update');
   const isConnected = device?.connectionState === 'connected';

@@ -100,7 +100,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectDevice }) 
     setActiveTab
   } = useMonitoring();
   const { user } = useAuth();
-  const isViewer = user?.role === 'viewer';
+  const isViewer = user?.role === 'user';
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const totalDevices = summary?.totalDevices ?? 0;

@@ -58,7 +58,7 @@ router.put('/rules/:id', (req, res) => {
   db.addAuditLog(
     'system-admin',
     'Administrator',
-    'it_admin',
+    'user',
     'RULE_UPDATED',
     'Settings',
     rule.id,
@@ -131,7 +131,7 @@ router.post('/issues/:id/create-ticket', (req, res) => {
         id: `note-${Date.now()}`,
         userId: 'admin',
         userName: 'IT Administrator',
-        userRole: 'it_admin',
+        userRole: 'user',
         text: notes,
         createdAt: new Date().toISOString()
       }
@@ -150,7 +150,7 @@ router.post('/issues/:id/create-ticket', (req, res) => {
   db.addAuditLog(
     'system-admin',
     'Administrator',
-    'it_admin',
+    'user',
     'TICKET_CREATED_FROM_ISSUE',
     'Ticket',
     newTicket.id,

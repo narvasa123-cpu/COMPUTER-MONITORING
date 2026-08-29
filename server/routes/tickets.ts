@@ -12,6 +12,12 @@ router.get('/', (req, res) => {
 
   let tickets = [...data.repairTickets];
 
+  if (res.locals.user?.role === 'user') {
+    const identity = [res.locals.user.fullName, res.locals.user.username, res.locals.user.email].map((value: string) => value.toLowerCase());
+    const assignedDeviceIds = new Set(data.devices.filter(device => identity.includes(device.assignedUser.toLowerCase())).map(device => device.id));
+    tickets = tickets.filter(ticket => assignedDeviceIds.has(ticket.deviceId));
+  }
+
   if (deviceId) {
     tickets = tickets.filter(t => t.deviceId === deviceId);
   }
@@ -62,6 +68,10 @@ router.post('/', (req, res) => {
   if (!device) {
     return res.status(404).json({ error: 'Device not found.' });
   }
+  if (res.locals.user?.role === 'user') {
+    const identity = [res.locals.user.fullName, res.locals.user.username, res.locals.user.email].map((value: string) => value.toLowerCase());
+    if (!identity.includes(device.assignedUser.toLowerCase())) return res.status(403).json({ error: 'Users may only report problems for their assigned computer.' });
+  }
 
   const count = data.repairTickets.length + 1;
   const ticketNumber = `TKT-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
@@ -103,7 +113,7 @@ router.post('/', (req, res) => {
   db.addAuditLog(
     'system-admin',
     'Administrator',
-    'it_admin',
+    'user',
     'TICKET_CREATED',
     'Ticket',
     newTicket.id,
@@ -177,7 +187,7 @@ router.put('/:id', (req, res) => {
   db.addAuditLog(
     'system-admin',
     'Administrator',
-    'it_admin',
+    'user',
     'TICKET_UPDATED',
     'Ticket',
     ticket.id,
@@ -204,7 +214,7 @@ router.post('/:id/notes', (req, res) => {
     id: `note-${Date.now()}`,
     userId: req.body.userId || 'admin',
     userName: userName || 'Technician',
-    userRole: userRole || 'technician',
+    userRole: userRole || 'user',
     text: text.trim(),
     createdAt: new Date().toISOString()
   };
@@ -344,7 +354,7 @@ router.post('/:id/resolve-and-log', (req, res) => {
   db.addAuditLog(
     'system-admin',
     technicianName || 'Technician',
-    'technician',
+    'user',
     'TICKET_RESOLVED_MAINTENANCE_LOGGED',
     'Maintenance',
     maintenance.id,

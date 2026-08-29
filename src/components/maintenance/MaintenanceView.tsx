@@ -92,7 +92,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onSelectDevice
 
   const partsCount = records.filter(record => Boolean(record.partsReplaced?.trim())).length;
   const ticketLinkedCount = records.filter(record => Boolean(record.ticketNumber || record.ticketId)).length;
-  const canLogMaintenance = user?.role !== 'viewer';
+  const canLogMaintenance = user?.role === 'super_admin';
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">

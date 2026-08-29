@@ -112,7 +112,7 @@ export const Header: React.FC = () => {
             </button>
           </div>
 
-          {user?.role !== 'viewer' && (
+          {user?.role !== 'user' && (
             <button
               id="header-add-device-btn"
               type="button"

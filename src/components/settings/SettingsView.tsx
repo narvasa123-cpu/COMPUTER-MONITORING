@@ -34,8 +34,8 @@ export const SettingsView: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settings) return;
-    if (user?.role !== 'super_admin' && user?.role !== 'it_admin') {
-      setError('Only an IT administrator can change monitoring settings.');
+    if (user?.role !== 'super_admin') {
+      setError('Only the Super Admin can change monitoring settings.');
       return;
     }
     setSaving(true);
@@ -69,7 +69,7 @@ export const SettingsView: React.FC = () => {
   if (!settings) {
     return <div className="max-w-xl rounded-xl border border-rose-200 bg-rose-50 p-5 text-center"><p role="alert" className="text-sm font-bold text-rose-800">{error || 'Monitoring settings are unavailable.'}</p><button type="button" onClick={() => void fetchSettings()} className="mt-3 rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-800">Retry</button></div>;
   }
-  const canManage = user?.role === 'super_admin' || user?.role === 'it_admin';
+  const canManage = user?.role === 'super_admin';
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -81,7 +81,7 @@ export const SettingsView: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
-        {!canManage && <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">Read-only access: only IT administrators can change monitoring and network diagnostic settings.</div>}
+        {!canManage && <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">Read-only access: only the Super Admin can change monitoring and network diagnostic settings.</div>}
         <fieldset disabled={!canManage} className="space-y-5 disabled:cursor-not-allowed disabled:opacity-60">
         {/* Heartbeat & Offline Timing */}
         <div className="space-y-3">

@@ -114,7 +114,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
   const activeCount = issues.filter(issue => issue.status === 'Active').length;
   const criticalCount = issues.filter(issue => issue.status !== 'Resolved' && issue.severity === 'Critical').length;
   const investigatingCount = issues.filter(issue => issue.status === 'Investigating').length;
-  const canManageFindings = user?.role !== 'viewer';
+  const canManageFindings = user?.role === 'super_admin';
 
   const statusTabs = [
     { value: 'Active', label: 'Active', count: activeCount },

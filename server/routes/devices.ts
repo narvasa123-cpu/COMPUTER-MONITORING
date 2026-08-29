@@ -19,6 +19,7 @@ router.get('/', (req, res) => {
   const data = db.get();
   const { departmentId, locationId, status, search, deviceType } = req.query;
 
+  const currentUser = res.locals.user;
   let devices = data.devices.map(device => {
     const specs = data.hardwareSpecs[device.id];
     const latestTelemetry = data.latestTelemetry[device.id];
@@ -35,6 +36,11 @@ router.get('/', (req, res) => {
       ,health: calculateDeviceHealth(device, latestTelemetry, data.diagnosticIssues.filter(i => i.deviceId === device.id), maintenance)
     };
   });
+
+  if (currentUser?.role === 'user') {
+    const identity = [currentUser.fullName, currentUser.username, currentUser.email].map((value: string) => value.toLowerCase());
+    devices = devices.filter(device => identity.includes(device.assignedUser.toLowerCase()));
+  }
 
   if (departmentId) {
     devices = devices.filter(d => d.departmentId === departmentId);
@@ -81,6 +87,10 @@ router.get('/:id', (req, res) => {
   if (!device) {
     return res.status(404).json({ error: 'Device not found.' });
   }
+  if (res.locals.user?.role === 'user') {
+    const identity = [res.locals.user.fullName, res.locals.user.username, res.locals.user.email].map((value: string) => value.toLowerCase());
+    if (!identity.includes(device.assignedUser.toLowerCase())) return res.status(403).json({ error: 'Users may only view their assigned computer.' });
+  }
 
   const specs = data.hardwareSpecs[device.id];
   const latestTelemetry = data.latestTelemetry[device.id];
@@ -103,6 +113,7 @@ router.get('/:id', (req, res) => {
     department
     ,health: calculateDeviceHealth(device, latestTelemetry, issues, maintenance)
   });
+
 });
 
 // POST register a new computer (generates registration code)
@@ -165,7 +176,7 @@ router.post('/', (req, res) => {
   db.addAuditLog(
     'system-admin',
     'Administrator',
-    'it_admin',
+    'user',
     'DEVICE_REGISTERED',
     'Device',
     newDevice.id,
@@ -234,7 +245,7 @@ router.put('/:id', (req, res) => {
   db.addAuditLog(
     'system-admin',
     'Administrator',
-    'it_admin',
+    'user',
     'DEVICE_UPDATED',
     'Device',
     device.id,
@@ -250,6 +261,10 @@ router.delete('/:id', (req, res) => {
   const device = data.devices.find(d => d.id === req.params.id);
   if (!device) {
     return res.status(404).json({ error: 'Device not found.' });
+  }
+  if (res.locals.user?.role === 'user') {
+    const identity = [res.locals.user.fullName, res.locals.user.username, res.locals.user.email].map((value: string) => value.toLowerCase());
+    if (!identity.includes(device.assignedUser.toLowerCase())) return res.status(403).json({ error: 'Users may only view their assigned computer.' });
   }
   if (req.body?.permanentlyDelete !== true || String(req.body?.confirmAssetId || '').trim() !== String(device.assetId || '').trim()) {
     return res.status(400).json({ error: 'Permanent deletion requires the exact Asset ID confirmation.' });

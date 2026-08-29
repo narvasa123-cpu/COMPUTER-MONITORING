@@ -48,7 +48,7 @@ export const DeviceList: React.FC<DeviceListProps> = ({ onSelectDevice }) => {
     refreshData
   } = useMonitoring();
   const { user } = useAuth();
-  const isViewer = user?.role === 'viewer';
+  const isViewer = user?.role === 'user';
 
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
