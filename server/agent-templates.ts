@@ -52,7 +52,7 @@ export function generatePowerShellAgent(serverUrl: string, registrationCode: str
     '# and post duplicate telemetry at the same time for one Windows user.',
     '$agentMutexCreated = $false',
     '$agentMutex = New-Object System.Threading.Mutex($true, "Local\\PCMonitoringAgent_$($env:USERNAME)", [ref]$agentMutexCreated)',
-    'if (-not $agentMutexCreated) {',
+    'if (-not $agentMutexCreated -and -not $InstallAsStartupTask) {',
     '    Write-Host "[INFO] Another PC Monitoring Agent instance is already running for this user. Exiting." -ForegroundColor Yellow',
     '    exit 0',
     '}',
