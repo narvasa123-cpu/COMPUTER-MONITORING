@@ -54,6 +54,7 @@ function initializeState(state: Json) {
 
 const stringValue = (value: unknown) => typeof value === 'string' ? value.trim() : value === undefined || value === null ? '' : String(value).trim();
 const numericValue = (value: unknown) => {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };

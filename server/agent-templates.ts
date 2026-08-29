@@ -646,12 +646,6 @@ function Get-WifiDiagnostics {
     }
 
     $wifiAdapter = $null
-    try {
-        $wifiAdapter = Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object {
-            $_.NdisPhysicalMedium -eq "Native 802.11" -or $_.InterfaceDescription -match "Wireless|Wi-Fi|802\.11"
-        } | Select-Object -First 1
-    } catch { }
-
     $netshFields = @{}
     try {
         $netshLines = @(netsh wlan show interfaces 2>$null)
@@ -660,6 +654,26 @@ function Get-WifiDiagnostics {
                 $key = $matches[1].Trim().ToLowerInvariant()
                 $netshFields[$key] = $matches[2].Trim()
             }
+        }
+    } catch { }
+
+    # Prefer the adapter named by netsh. Selecting the first wireless-looking
+    # adapter can choose a disconnected virtual interface while another
+    # physical adapter is actively associated with the SSID.
+    try {
+        $netshInterfaceName = if ($netshFields.ContainsKey("name")) { [string]$netshFields["name"] } else { "" }
+        if ($netshInterfaceName) {
+            $wifiAdapter = Get-NetAdapter -Name $netshInterfaceName -IncludeHidden -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
+        if (-not $wifiAdapter) {
+            $wifiAdapter = Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object {
+                ($_.NdisPhysicalMedium -eq "Native 802.11" -or $_.InterfaceDescription -match "Wireless|Wi-Fi|802\.11") -and $_.Status -eq "Up"
+            } | Select-Object -First 1
+        }
+        if (-not $wifiAdapter) {
+            $wifiAdapter = Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object {
+                $_.NdisPhysicalMedium -eq "Native 802.11" -or $_.InterfaceDescription -match "Wireless|Wi-Fi|802\.11"
+            } | Select-Object -First 1
         }
     } catch { }
 
@@ -681,7 +695,8 @@ function Get-WifiDiagnostics {
 
     $netshState = if ($netshFields.ContainsKey("state")) { [string]$netshFields["state"] } else { "" }
     $stateNormalized = $netshState.Trim().ToLowerInvariant()
-    if ($stateNormalized -eq "connected") {
+    $adapterUnavailable = [string]$result.adapterStatus -match "Disabled|Disconnected|Not Present"
+    if ($stateNormalized -eq "connected" -and -not $adapterUnavailable) {
         $result.connectionState = "CONNECTED"
     } elseif ([string]$result.adapterStatus -match "Disabled") {
         $result.connectionState = "DISABLED"
