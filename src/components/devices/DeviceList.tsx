@@ -154,7 +154,7 @@ export const DeviceList: React.FC<DeviceListProps> = ({ onSelectDevice }) => {
           </div>
         </div>
 
-        <div className="grid border-t border-slate-100 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="app-device-summary-grid grid border-t border-slate-100 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { label: 'Agent connected', value: liveAgentCount, detail: 'Authenticated recent heartbeats', tone: 'text-emerald-700', dot: 'bg-emerald-500' },
             { label: 'Needs attention', value: attentionCount, detail: 'Warning, critical, or active findings', tone: attentionCount ? 'text-amber-700' : 'text-slate-700', dot: attentionCount ? 'bg-amber-500' : 'bg-slate-300' },
