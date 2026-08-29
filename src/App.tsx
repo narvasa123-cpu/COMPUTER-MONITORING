@@ -56,7 +56,7 @@ function MainAppLayout() {
         <Sidebar />
 
         {/* Main Content Viewport */}
-        <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 xl:p-9">
+        <main className="app-main-content min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 lg:p-8 xl:p-9">
           {activeTab === 'dashboard' && (
             <DashboardView
               onSelectDevice={(id) => {

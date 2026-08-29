@@ -64,7 +64,7 @@ export const Header: React.FC = () => {
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-950 to-slate-800 text-white shadow-[0_8px_18px_rgba(15,23,42,0.18)] ring-1 ring-slate-900/10">
+          <div className="app-brand-mark flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-950 to-slate-800 text-white shadow-[0_8px_18px_rgba(15,23,42,0.18)] ring-1 ring-slate-900/10">
             <Monitor className="h-5 w-5 text-indigo-200" aria-hidden="true" />
           </div>
           <div className="min-w-0">
@@ -72,7 +72,7 @@ export const Header: React.FC = () => {
               <h1 className="truncate text-[15px] font-bold tracking-[-0.02em] text-slate-950 sm:text-base">
                 PC &amp; Laptop Monitoring
               </h1>
-              <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${
+              <span className={`app-sync-badge inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${
                 isPolling
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                   : 'border-slate-200 bg-slate-50 text-slate-600'

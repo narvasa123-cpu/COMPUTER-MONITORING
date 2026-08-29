@@ -112,6 +112,10 @@ button:not(:disabled),
   display: none;
 }
 
+.app-main-content {
+  overscroll-behavior-x: none;
+}
+
 .app-sidebar-link::before {
   position: absolute;
   top: 50%;
@@ -204,6 +208,47 @@ button:not(:disabled),
     right: 1rem;
     left: 1rem;
     width: auto;
+  }
+
+  .app-main-content {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-header-inner {
+    gap: 0.375rem;
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+  }
+
+  .app-mobile-nav-trigger,
+  .app-header .h-10 {
+    height: 2.25rem;
+    width: 2.25rem;
+  }
+
+  .app-brand-mark {
+    display: none;
+  }
+
+  .app-sync-badge {
+    display: none;
+  }
+
+  .app-header h1 {
+    font-size: 0.8125rem;
+  }
+
+  .app-main-content {
+    padding: 0.75rem;
+  }
+
+  /* Keep summary cards and compact metric groups readable on very narrow screens. */
+  .app-main-content .grid.grid-cols-2,
+  .app-main-content .grid.grid-cols-3,
+  .app-main-content .grid.grid-cols-4 {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
