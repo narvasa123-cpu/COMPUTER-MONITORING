@@ -114,7 +114,10 @@ export interface WifiDiagnostics {
   connectionObservedSince?: string | null;
   connectionDurationSeconds?: number | null;
   gatewayReachable?: boolean | null;
+  gatewayLatencyMs?: number | null;
+  gatewayProbeMethod?: string | null;
   dnsResolution?: boolean | null;
+  dnsResponseTimeMs?: number | null;
   internetReachable?: boolean | null;
   internetIcmpReachable?: boolean | null;
   internetHttpReachable?: boolean | null;

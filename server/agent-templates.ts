@@ -629,7 +629,10 @@ function Get-WifiDiagnostics {
         connectionObservedSince = $null
         connectionDurationSeconds = $null
         gatewayReachable = $null
+        gatewayLatencyMs = $null
+        gatewayProbeMethod = $null
         dnsResolution = $null
+        dnsResponseTimeMs = $null
         internetReachable = $null
         internetIcmpReachable = $null
         internetHttpReachable = $null
@@ -753,9 +756,16 @@ function Get-WifiDiagnostics {
 
     if ($result.defaultGateway) {
         try {
+            $gatewayWatch = [System.Diagnostics.Stopwatch]::StartNew()
             $gatewayResponses = @(Test-Connection -ComputerName $result.defaultGateway -Count 3 -ErrorAction SilentlyContinue)
+            $gatewayWatch.Stop()
             $result.gatewayReachable = $gatewayResponses.Count -gt 0
-        } catch { $result.gatewayReachable = $false }
+            $result.gatewayProbeMethod = "ICMP"
+            if ($gatewayResponses.Count -gt 0) {
+                $gatewayLatencies = @($gatewayResponses | ForEach-Object { if ($null -ne $_.ResponseTime) { [double]$_.ResponseTime } } | Where-Object { $null -ne $_ })
+                if ($gatewayLatencies.Count -gt 0) { $result.gatewayLatencyMs = [math]::Round(($gatewayLatencies | Measure-Object -Average).Average, 1) }
+            }
+        } catch { $result.gatewayReachable = $false; $result.gatewayProbeMethod = "ICMP" }
     }
     if ($result.gatewayReachable -ne $true) {
         return [pscustomobject]$result
@@ -775,9 +785,12 @@ function Get-WifiDiagnostics {
         }
     } catch { }
     try {
+        $dnsWatch = [System.Diagnostics.Stopwatch]::StartNew()
         $dnsAnswer = Resolve-DnsName -Name "www.msftconnecttest.com" -Type A -DnsOnly -ErrorAction Stop | Select-Object -First 1
+        $dnsWatch.Stop()
         $result.dnsResolution = $null -ne $dnsAnswer
-    } catch { $result.dnsResolution = $false }
+        $result.dnsResponseTimeMs = [int]$dnsWatch.ElapsedMilliseconds
+    } catch { if ($dnsWatch) { $dnsWatch.Stop(); $result.dnsResponseTimeMs = [int]$dnsWatch.ElapsedMilliseconds }; $result.dnsResolution = $false }
     try {
         $responseWatch = [System.Diagnostics.Stopwatch]::StartNew()
         $response = Invoke-WebRequest -Uri "https://www.msftconnecttest.com/connecttest.txt" -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
