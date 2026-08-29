@@ -213,6 +213,42 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
   const canViewNetworkDiagnostics = user?.role === 'super_admin' || user?.role === 'it_admin' || user?.role === 'technician';
   const canManageAgentUpdates = user?.role === 'super_admin' || user?.role === 'it_admin';
   const isPairedWithAgent = device.connectionState !== 'never_connected';
+  const lowestFreeStorage = tel?.storage?.reduce((lowest, disk) => {
+    const freePercent = disk.capacityBytes > 0 ? (disk.freeBytes / disk.capacityBytes) * 100 : 100;
+    return Math.min(lowest, freePercent);
+  }, 100);
+  const hardwareChecks = [
+    {
+      label: 'CPU load',
+      value: tel ? `${Math.round(tel.cpuUsagePercent)}%` : 'Unavailable',
+      status: !tel ? 'Unavailable' : tel.cpuUsagePercent >= 90 ? 'Critical' : tel.cpuUsagePercent >= 80 ? 'Warning' : 'Healthy',
+      detail: 'Sustained processor utilization'
+    },
+    {
+      label: 'Memory pressure',
+      value: tel ? `${Math.round(tel.ramUsagePercent)}%` : 'Unavailable',
+      status: !tel ? 'Unavailable' : tel.ramUsagePercent >= 90 ? 'Critical' : tel.ramUsagePercent >= 80 ? 'Warning' : 'Healthy',
+      detail: 'Physical RAM in use'
+    },
+    {
+      label: 'CPU temperature',
+      value: tel?.cpuTempC !== undefined ? `${Math.round(tel.cpuTempC)}°C` : 'Unavailable',
+      status: tel?.cpuTempC === undefined ? 'Unavailable' : tel.cpuTempC >= 82 ? 'Critical' : tel.cpuTempC >= 70 ? 'Warning' : 'Healthy',
+      detail: 'Thermal operating range'
+    },
+    {
+      label: 'Storage health',
+      value: tel?.storage?.length ? `${Math.round(lowestFreeStorage)}% free` : 'Unavailable',
+      status: !tel?.storage?.length ? 'Unavailable' : tel.storage.some(disk => disk.health === 'Failing' || disk.smartStatus?.toLowerCase().includes('bad')) ? 'Critical' : lowestFreeStorage < 12 ? 'Warning' : 'Healthy',
+      detail: 'Capacity and SMART state'
+    },
+    {
+      label: 'Battery health',
+      value: tel?.battery?.present ? `${tel.battery.healthPercent}% health` : device.deviceType === 'Laptop' ? 'Unavailable' : 'Not applicable',
+      status: !tel?.battery?.present ? 'Unavailable' : tel.battery.healthPercent <= 60 ? 'Warning' : 'Healthy',
+      detail: 'Maximum charge capacity'
+    }
+  ] as const;
 
   const openAgentUpdate = () => {
     setAgentUpdateTargetDevice(device);
@@ -766,6 +802,37 @@ export const DeviceDetailsView: React.FC<DeviceDetailsViewProps> = ({
             <div>
               <h3 className="text-sm font-bold text-slate-900">Hardware & Firmware Configuration</h3>
               <p className="text-xs text-slate-500">Collected automatically via WMI / sysfs agent inspection.</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wide text-indigo-950">Hardware diagnostic checks</h4>
+                <p className="mt-0.5 text-[11px] text-indigo-700">Latest agent telemetry compared with configured safety thresholds.</p>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-500">Read-only assessment</span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {hardwareChecks.map((check) => {
+                const tone = check.status === 'Critical'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : check.status === 'Warning'
+                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                    : check.status === 'Healthy'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 bg-white text-slate-500';
+                return (
+                  <div key={check.label} className={`rounded-lg border px-3 py-2.5 ${tone}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wide opacity-75">{check.label}</p>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                    </div>
+                    <p className="mt-1 text-sm font-black">{check.value}</p>
+                    <p className="mt-0.5 text-[10px] opacity-75">{check.status} · {check.detail}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
