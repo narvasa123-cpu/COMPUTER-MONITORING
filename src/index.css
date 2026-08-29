@@ -193,6 +193,10 @@ button:not(:disabled),
   .app-sidebar-mobile-title {
     display: flex;
   }
+
+  .app-header-subtitle {
+    display: none;
+  }
 }
 
 @media (max-width: 639px) {
