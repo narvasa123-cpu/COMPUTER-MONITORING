@@ -709,7 +709,29 @@ function Get-WifiDiagnostics {
             $ipv6Address = @($ipConfig.IPv6Address | Where-Object { $_.IPAddress -and $_.IPAddress -notmatch '^fe80:' } | Select-Object -First 1)
             if ($ipv4Address.Count -gt 0) { $result.ipv4 = [string]$ipv4Address[0].IPAddress }
             if ($ipv6Address.Count -gt 0) { $result.ipv6 = [string]$ipv6Address[0].IPAddress }
+            if (-not $result.defaultGateway -and $ipConfig.IPv4DefaultGateway) {
+                $result.defaultGateway = [string](@($ipConfig.IPv4DefaultGateway | Where-Object { $_.NextHop } | Select-Object -First 1).NextHop)
+            }
         } catch { }
+        # Get-NetIPConfiguration can omit an address while the adapter is
+        # renewing DHCP. Query the address and route tables directly as a
+        # second source before classifying the result as a DHCP failure.
+        if (-not $result.ipv4) {
+            try {
+                $directIpv4 = @(Get-NetIPAddress -InterfaceIndex $interfaceIndex -AddressFamily IPv4 -ErrorAction Stop | Where-Object {
+                    $_.IPAddress -and $_.IPAddress -notmatch '^(0\.0\.0\.0|127\.|169\.254\.)'
+                } | Select-Object -First 1)
+                if ($directIpv4.Count -gt 0) { $result.ipv4 = [string]$directIpv4[0].IPAddress }
+            } catch { }
+        }
+        if (-not $result.ipv6) {
+            try {
+                $directIpv6 = @(Get-NetIPAddress -InterfaceIndex $interfaceIndex -AddressFamily IPv6 -ErrorAction Stop | Where-Object {
+                    $_.IPAddress -and $_.IPAddress -notmatch '^fe80:'
+                } | Select-Object -First 1)
+                if ($directIpv6.Count -gt 0) { $result.ipv6 = [string]$directIpv6[0].IPAddress }
+            } catch { }
+        }
         try {
             $adapterConfig = Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "InterfaceIndex = $interfaceIndex" -ErrorAction Stop | Select-Object -First 1
             if ($adapterConfig) {
